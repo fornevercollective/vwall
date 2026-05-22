@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Grok Editor</title>
+  <script src="https://unpkg.com/monaco-editor@0.45.0/min/vs/loader.min.js"></script>
+  <style>
+    body { margin: 0; }
+    #container { height: calc(100vh - 40px); }
+    #toolbar { background: #f0f0f0; padding: 5px; height: 30px; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button onclick="openFile()">Open</button>
+    <button onclick="saveFile()">Save</button>
+    <button onclick="batchSearch()">Batch Search</button>
+    <button onclick="sortData()">Sort</button>
+    <button onclick="shareProject()">Share with console.x.ai</button>
+  </div>
+  <div id="container"></div>
+  <script>
+    const fs = require('fs');
+    const path = require('path');
+    const { dialog } = require('electron').remote;
+    const axios = require('axios');
+    let editor;
+    let currentFile;
+    require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.45.0/min/vs' } });
+    require(['vs/editor/editor.main'], function() {
+      editor = monaco.editor.create(document.getElementById('container'), {
+        value: '// Welcome to Grok Editor\n// Supports syntax highlighting for all languages\n// Copy and paste raw code from documents\n// Use toolbar for operations',
+        language: 'javascript'
+      });
+    });
+    function openFile() {
+      dialog.showOpenDialog({ properties: ['openFile'] }).then(result => {
+        if (!result.canceled) {
+          currentFile = result.filePaths[0];
+          const content = fs.readFileSync(currentFile, 'utf8');
+          const lang = getLangFromExt(path.extname(currentFile));
+          editor.setValue(content);
+          monaco.editor.setModelLanguage(editor.getModel(), lang);
+        }
+      });
+    }
+    function saveFile() {
+      if (currentFile) {
+        fs.writeFileSync(currentFile, editor.getValue());
+        alert('Saved');
+      } else {
+        dialog.showSaveDialog({}).then(result => {
+          if (!result.canceled) {
+            fs.writeFileSync(result.filePath, editor.getValue());
+            currentFile = result.filePath;
+          }
+        });
+      }
+    }
+    function batchSearch() {
+      const pattern = prompt('Enter search pattern');
+      if (!pattern) return;
+      const dir = prompt('Enter directory', '.');
+      // recursive search
+      function searchInDir(dirPath, results = []) {
+        const items = fs.readdirSync(dirPath);
+        items.forEach(item => {
+          const fullPath = path.join(dirPath, item);
+          const stat = fs.statSync(fullPath);
+          if (stat.isDirectory()) {
+            searchInDir(fullPath, results);
+          } else if (stat.isFile()) {
+            try {
+              const content = fs.readFileSync(fullPath, 'utf8');
+              const lines = content.split('\n');
+              lines.forEach((line, idx) => {
+                if (line.includes(pattern)) {
+                  results.push(`${fullPath}:${idx + 1}: ${line.trim()}`);
+                }
+              });
+            } catch (e) {
+              // skip binary files
+            }
+          }
+        });
+        return results;
+      }
+      const results = searchInDir(dir);
+      alert(results.length ? results.join('\n') : 'No matches');
+    }
+    function sortData() {
+      const file = prompt('Enter file to sort');
+      if (!file || !fs.existsSync(file)) return alert('File not found');
+      let content = fs.readFileSync(file, 'utf8');
+      let lines = content.split('\n').filter(l => l.trim());
+      lines.sort();
+      fs.writeFileSync(file, lines.join('\n'));
+      alert('Sorted');
+    }
+    function shareProject() {
+      if (!currentFile) return alert('No file open');
+      const content = editor.getValue();
+      // placeholder for console.x.ai
+      axios.post('https://console.x.ai/api/upload', {
+        file: path.basename(currentFile),
+        content: content
+      }, {
+        headers: { 'Content-Type': 'application/json' }
+      })
+      .then(response => {
+        alert('Shared successfully');
+      })
+      .catch(error => {
+        alert('Failed to share: ' + error.message);
+      });
+    }
+    function getLangFromExt(ext) {
+      const map = {
+        '.js': 'javascript',
+        '.mjs': 'javascript',
+        '.ts': 'typescript',
+        '.py': 'python',
+        '.java': 'java',
+        '.c': 'c',
+        '.cpp': 'cpp',
+        '.cs': 'csharp',
+        '.php': 'php',
+        '.rb': 'ruby',
+        '.go': 'go',
+        '.rs': 'rust',
+        '.html': 'html',
+        '.css': 'css',
+        '.scss': 'scss',
+        '.json': 'json',
+        '.xml': 'xml',
+        '.yaml': 'yaml',
+        '.yml': 'yaml',
+        '.md': 'markdown',
+        '.sql': 'sql',
+        '.sh': 'shell',
+        '.ps1': 'powershell'
+      };
+      return map[ext] || 'plaintext';
+    }
+  </script>
+</body>
+</html>

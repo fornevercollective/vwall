@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Color Sorted Image Wall</title>
+
+<style>
+  body {
+    margin: 0;
+    background: #111;
+    font-family: sans-serif;
+  }
+
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 100px);
+    grid-auto-rows: 100px;
+    gap: 2px;
+    padding: 2px;
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 12px 20px;
+    backdrop-filter: blur(8px);
+  }
+
+  #search {
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid #444;
+    border-radius: 6px;
+    background: #222;
+    color: #fff;
+    font-size: 16px;
+    outline: none;
+  }
+
+  #search:focus {
+    border-color: #666;
+  }
+
+  #search::placeholder {
+    color: #888;
+  }
+</style>
+
+</head>
+
+<body>
+
+<div id="grid"></div>
+
+<footer>
+  <input type="text" id="search" placeholder="Search images...">
+</footer>
+
+<script>
+
+// Sample image set (replace with your own later)
+const imageUrls = Array.from({length: 60}, (_, i) =>
+  `https://picsum.photos/300?random=${i+1}`
+);
+
+// Get average color of image
+function getAverageColor(img) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  canvas.width = 50;
+  canvas.height = 50;
+
+  ctx.drawImage(img, 0, 0, 50, 50);
+
+  const data = ctx.getImageData(0, 0, 50, 50).data;
+
+  let r = 0, g = 0, b = 0;
+  const count = data.length / 4;
+
+  for (let i = 0; i < data.length; i += 4) {
+    r += data[i];
+    g += data[i + 1];
+    b += data[i + 2];
+  }
+
+  return {
+    r: r / count,
+    g: g / count,
+    b: b / count
+  };
+}
+
+// Convert RGB → Hue
+function rgbToHue(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+
+  let h = 0;
+
+  if (max !== min) {
+    if (max === r) {
+      h = (60 * ((g - b) / (max - min)) + 360) % 360;
+    } else if (max === g) {
+      h = 60 * ((b - r) / (max - min)) + 120;
+    } else {
+      h = 60 * ((r - g) / (max - min)) + 240;
+    }
+  }
+
+  return h;
+}
+
+// Main loader
+async function loadImages() {
+  const results = [];
+
+  for (let url of imageUrls) {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = url;
+
+    await new Promise(resolve => img.onload = resolve);
+
+    const color = getAverageColor(img);
+    const hue = rgbToHue(color.r, color.g, color.b);
+
+    results.push({ img, hue });
+  }
+
+  // Sort by hue
+  results.sort((a, b) => a.hue - b.hue);
+
+  // Render
+  const grid = document.getElementById("grid");
+
+  results.forEach(item => {
+    grid.appendChild(item.img);
+  });
+}
+
+loadImages();
+
+// Search functionality
+const searchInput = document.getElementById("search");
+searchInput.addEventListener("input", (e) => {
+  const query = e.target.value.toLowerCase();
+  const images = document.querySelectorAll("#grid img");
+  
+  images.forEach(img => {
+    const src = img.src.toLowerCase();
+    const alt = img.alt?.toLowerCase() || "";
+    const matches = src.includes(query) || alt.includes(query);
+    img.style.display = matches ? "" : "none";
+  });
+});
+
+</script>
+
+</body>
+</html>

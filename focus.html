@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VWall - Focus</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  #focus {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  #focus img {
+    max-width: 95vw;
+    max-height: 95vh;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+  #ui a {
+    text-decoration: none;
+    color: #fff;
+  }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <a href="index.html"><button>← Back</button></a>
+</div>
+
+<div id="focus"></div>
+
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const img = params.get("img");
+  if (img) {
+    document.getElementById("focus").innerHTML =
+      `<img src="${img}" onclick="window.close()">`;
+  }
+</script>
+
+</body>
+</html>

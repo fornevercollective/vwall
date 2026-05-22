@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VWall</title>
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="header">
+  <div class="header-left">
+    <label>Count: <input id="countSlider" type="range" min="10" max="1000" value="250" /><span id="countVal">250</span></label>
+  </div>
+  <div class="header-right">
+    <span id="perf">--</span>
+  </div>
+</div>
+
+<footer>
+  <input id="search" type="text" placeholder="Search images..." />
+  <button onclick="runSearch()">Go</button>
+  <button id="layoutBtn" onclick="toggleLayout()">Sphere</button>
+  <button id="blurBtn" onclick="toggleBlur()">Blur: OFF</button>
+  <button id="blendBtn" onclick="toggleBlend()">Blend: OFF</button>
+  <button onclick="reseed()">Reseed</button>
+  <button onclick="openSettings()">⚙</button>
+</footer>
+
+<div id="drawer"></div>
+<div id="settings"></div>
+
+<video id="video" controls style="display:none; width:100%; height:100%;"></video>
+<canvas id="c"></canvas>
+
+<script src="app.js"></script>
+</body>
+</html>
