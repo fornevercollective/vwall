@@ -1,0 +1,5 @@
+.DS_Store
+vidwn/key.pem
+vidwn/cert.pem
+__pycache__/
+*.pyc
