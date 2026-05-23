@@ -1,3 +1,4 @@
+<img width="974" height="788" alt="Screenshot 2026-05-22 at 12 55 28 pm" src="https://github.com/user-attachments/assets/1a3ee1cd-acc8-441d-810d-f4c8607f1a9e" />
 # VWall
 
 GPU image wall (PixiJS) with open image search (no API keys).
