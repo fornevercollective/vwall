@@ -15,12 +15,14 @@ canvas {
   top: 0;
   left: 0;
   right: 0;
-  padding: 8px 16px;
+  padding: 8px 12px;
   background: rgba(15,15,15,0.9);
   backdrop-filter: blur(6px);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   z-index: 20;
   border-bottom: 1px solid #222;
   color: #ccc;
@@ -49,9 +51,57 @@ canvas {
   display: flex;
   gap: 16px;
   align-items: center;
+  margin-left: auto;
 }
 
-#perf {
+.sort-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #aaa;
+}
+
+#sortMode {
+  padding: 4px 6px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #222;
+  color: #fff;
+  font-size: 12px;
+}
+
+.media-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  flex: 1;
+  min-width: 200px;
+}
+
+.media-chip {
+  padding: 4px 8px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #aaa;
+  font-size: 11px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.media-chip.on {
+  color: #fff;
+  border-color: var(--chip-color, #888);
+  background: color-mix(in srgb, var(--chip-color, #444) 35%, #1a1a1a);
+}
+
+.media-chip.off {
+  opacity: 0.45;
+}
+
+#perf,
+.perf-compact {
   font-family: "SF Mono", "Consolas", monospace;
   font-size: 12px;
   padding: 3px 8px;
@@ -59,6 +109,70 @@ canvas {
   background: #1a1a1a;
   border: 1px solid #333;
   white-space: nowrap;
+}
+
+#metricsPanel {
+  position: fixed;
+  top: 52px;
+  right: 8px;
+  width: 200px;
+  padding: 10px 12px;
+  background: rgba(12, 12, 12, 0.92);
+  border: 1px solid #333;
+  border-radius: 8px;
+  z-index: 25;
+  font-size: 11px;
+  color: #aaa;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.metrics-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+  line-height: 1.35;
+}
+
+.metric-row strong {
+  color: #e8e8e8;
+  font-weight: 600;
+  font-family: "SF Mono", "Consolas", monospace;
+  text-align: right;
+}
+
+.metric-wide {
+  font-size: 10px;
+  max-width: 118px;
+  word-break: break-word;
+}
+
+.metrics-hint {
+  margin: 10px 0 0;
+  font-size: 10px;
+  color: #555;
+  line-height: 1.4;
+  pointer-events: auto;
+}
+
+.metrics-hint code {
+  font-size: 9px;
+  color: #888;
+}
+
+#mFps {
+  border: 1px solid #333;
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 
 /* FOOTER */
@@ -116,6 +230,20 @@ button.active {
   color: #666;
 }
 
+#searchStatus {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#searchBtn:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 /* RIGHT DRAWER */
 #drawer {
   position: fixed;
@@ -143,10 +271,36 @@ button.active {
   font-weight: 600;
 }
 
-#drawer img {
+#drawer img,
+#drawer video,
+#drawer audio {
   width: 100%;
   border-radius: 8px;
   margin-bottom: 10px;
+}
+
+#drawer .media-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  background: #333;
+}
+
+#drawer .open-link {
+  display: inline-block;
+  margin-top: 8px;
+  color: #8af;
+  font-size: 13px;
+}
+
+#drawer .hint {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.5;
 }
 
 #drawer .meta {
