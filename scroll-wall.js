@@ -7,6 +7,46 @@
   let activeGenre = null;
   let scrollExtendLock = false;
   let selectedKey = null;
+  let genreRailShellReady = false;
+  let genreRailCollapsed = false;
+
+  try {
+    genreRailCollapsed = localStorage.getItem("vwallGenreRailCollapsed") === "1";
+  } catch {
+    genreRailCollapsed = false;
+  }
+
+  function updateGenreRailSummary() {
+    const el = document.getElementById("genreRailSummary");
+    if (el) el.textContent = activeGenre || "All";
+  }
+
+  function updateGenreRailCollapsed() {
+    document.body.classList.toggle("genre-rail-collapsed", genreRailCollapsed);
+    const toggle = document.getElementById("genreRailToggle");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", genreRailCollapsed ? "false" : "true");
+      toggle.title = genreRailCollapsed ? "Show genre tags" : "Hide genre tags";
+      const chev = toggle.querySelector(".genre-rail-chevron");
+      if (chev) chev.textContent = genreRailCollapsed ? "▸" : "▾";
+    }
+  }
+
+  function ensureGenreRailShell() {
+    if (genreRailShellReady) return;
+    genreRailShellReady = true;
+    document.getElementById("genreRailToggle")?.addEventListener("click", () => {
+      genreRailCollapsed = !genreRailCollapsed;
+      try {
+        localStorage.setItem("vwallGenreRailCollapsed", genreRailCollapsed ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      updateGenreRailCollapsed();
+    });
+    updateGenreRailCollapsed();
+    updateGenreRailSummary();
+  }
 
   function useScrollWall() {
     return global.matchMedia("(max-width: 899px)").matches;
@@ -235,6 +275,7 @@
   }
 
   function initGenreRail(labels, onGenreChange) {
+    ensureGenreRailShell();
     const rail = document.getElementById("genreRail");
     if (!rail) return;
 
@@ -270,6 +311,7 @@
         });
         rail.appendChild(chip);
       }
+      updateGenreRailSummary();
     };
 
     render();
@@ -280,6 +322,7 @@
   }
 
   function init() {
+    ensureGenreRailShell();
     global.matchMedia("(max-width: 899px)").addEventListener("change", () => {
       document.body.classList.toggle("scroll-mode", useScrollWall());
       if (!useScrollWall()) closeInlinePreview();

@@ -1,7 +1,9 @@
 :root {
   --header-h: 76px;
   --footer-h: 96px;
-  --genre-rail-h: 48px;
+  --genre-rail-head-h: 34px;
+  --genre-rail-chips-h: 48px;
+  --genre-rail-h: calc(var(--genre-rail-head-h) + var(--genre-rail-chips-h));
   --inline-preview-h: 0px;
   --touch-min: 44px;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -62,13 +64,13 @@ canvas {
 
 /* Scroll wall (mobile browse mode) */
 .scroll-viewport,
-.genre-rail,
+.genre-rail-wrap,
 .inline-preview {
   display: none;
 }
 
 body.scroll-mode .scroll-viewport,
-body.scroll-mode .genre-rail {
+body.scroll-mode .genre-rail-wrap {
   display: block;
 }
 
@@ -165,23 +167,83 @@ body.scroll-mode .genre-rail {
   box-shadow: 0 0 0 2px rgba(136, 170, 255, 0.35);
 }
 
-.genre-rail {
+.genre-rail-wrap {
   position: fixed;
   left: 0;
   right: 0;
   bottom: calc(var(--footer-h) + var(--inline-preview-h) + var(--safe-bottom));
   z-index: 20;
+  background: rgba(12, 12, 14, 0.96);
+  border-top: 1px solid #2a2a32;
+  box-sizing: border-box;
+}
+
+.genre-rail-head {
+  padding: 2px 6px 0;
+}
+
+.genre-rail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: var(--genre-rail-head-h);
+  padding: 4px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #999;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.genre-rail-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ccc;
+}
+
+.genre-rail-summary {
+  flex: 1;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+  color: #9a8acc;
+}
+
+.genre-rail-chevron {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #666;
+}
+
+body.genre-rail-collapsed {
+  --genre-rail-h: var(--genre-rail-head-h);
+}
+
+.genre-rail {
   display: flex;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 4px 10px 6px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  background: rgba(12, 12, 14, 0.96);
-  border-top: 1px solid #2a2a32;
-  min-height: var(--genre-rail-h);
+  max-height: var(--genre-rail-chips-h);
   box-sizing: border-box;
   align-items: center;
+  transition: max-height 0.22s ease, opacity 0.18s ease, padding 0.22s ease;
+}
+
+body.genre-rail-collapsed .genre-rail {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .genre-rail::-webkit-scrollbar {

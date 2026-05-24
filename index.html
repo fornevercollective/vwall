@@ -105,7 +105,16 @@
   <div id="scrollWall" class="scroll-wall"></div>
 </div>
 
-<nav id="genreRail" class="genre-rail" aria-label="Genre filter"></nav>
+<div id="genreRailWrap" class="genre-rail-wrap">
+  <div class="genre-rail-head">
+    <button type="button" id="genreRailToggle" class="genre-rail-toggle touch-target" aria-expanded="true" aria-controls="genreRail">
+      <span class="genre-rail-toggle-label">Genres</span>
+      <span id="genreRailSummary" class="genre-rail-summary">All</span>
+      <span class="genre-rail-chevron" aria-hidden="true">▾</span>
+    </button>
+  </div>
+  <nav id="genreRail" class="genre-rail" aria-label="Genre filter"></nav>
+</div>
 
 <div id="inlinePreview" class="inline-preview" aria-hidden="true"></div>
 
