@@ -27,7 +27,10 @@
   </div>
 
   <div id="controlPanelBody" class="sheet-body-scroll">
-    <section class="panel-section">
+    <div class="desk-toolbar">
+    <div class="desk-row desk-row-primary">
+    <span class="brand desk-brand">VWall</span>
+    <section class="panel-section panel-count">
       <h3 class="panel-heading mobile-only">Count</h3>
       <div class="count-block">
         <div class="count-row count-row-main">
@@ -57,7 +60,7 @@
     </section>
 
     <section class="panel-section panel-sort">
-      <h3 class="panel-heading mobile-only">Sort &amp; types</h3>
+      <h3 class="panel-heading mobile-only">Sort</h3>
       <label class="sort-label field-label">Sort
         <select id="sortMode" class="touch-target" title="Layout order on the wall">
           <option value="mixed">Mixed</option>
@@ -72,7 +75,13 @@
           <option value="cdn">CDN / region</option>
         </select>
       </label>
-      <p class="field-label mobile-only">Media types</p>
+    </section>
+    </div>
+
+    <div class="desk-row desk-row-secondary">
+    <section class="panel-section panel-media">
+      <h3 class="panel-heading mobile-only">Media types</h3>
+      <span class="toolbar-label desk-label">Types</span>
       <div id="mediaFilters" class="media-filters"></div>
     </section>
 
@@ -85,6 +94,8 @@
         <button type="button" id="reseedBtn" class="touch-target">Reseed</button>
       </div>
     </section>
+    </div>
+    </div>
   </div>
   </div>
 </div>
