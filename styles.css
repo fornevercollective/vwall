@@ -83,6 +83,41 @@ body.scroll-mode .genre-rail-wrap {
   overscroll-behavior: contain;
   z-index: 5;
   background: #0b0b0b;
+  --pull-distance: 0px;
+  transition: transform 0.16s ease;
+}
+
+.scroll-viewport.pull-refresh-active {
+  transform: translateY(var(--pull-distance));
+}
+
+.pull-refresh-hint {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  margin: 0 auto;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid #2f2f36;
+  background: rgba(16, 16, 19, 0.92);
+  color: #8d8d96;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transform: translateY(-125%);
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.scroll-viewport.pull-refresh-active .pull-refresh-hint {
+  transform: translateY(8px);
+  opacity: 1;
+}
+
+.scroll-viewport.pull-refresh-armed .pull-refresh-hint {
+  color: #c7c7ff;
+  border-color: #5a5a8a;
 }
 
 .scroll-wall {
@@ -287,12 +322,12 @@ body.genre-rail-collapsed .genre-rail {
 }
 
 body.scroll-mode.preview-open {
-  --inline-preview-h: 42vh;
+  --inline-preview-h: 58vh;
 }
 
 .inline-preview.open {
   display: block;
-  max-height: 42vh;
+  max-height: 58vh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   pointer-events: auto;
@@ -321,7 +356,7 @@ body.scroll-mode.preview-open {
 .inline-preview-media video,
 .inline-preview-media audio {
   width: 100%;
-  max-height: 22vh;
+  max-height: 36vh;
   object-fit: contain;
   border-radius: 8px;
 }
@@ -341,6 +376,21 @@ body.scroll-mode.preview-open {
   margin: 0 0 8px;
   color: #9a8acc;
   font-size: 12px;
+}
+
+.inline-preview-details-toggle {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #3b3b46;
+  border-radius: 8px;
+  background: #202028;
+  color: #cfcfe2;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.inline-preview-details {
+  margin-top: 8px;
 }
 
 body.scroll-mode #drawer {
