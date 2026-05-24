@@ -65,6 +65,9 @@ let selected = null;
 let seed = 0;
 
 const CELL_SIZE = 90;
+const TILE_SPRITE_PX = 80;
+const LOD_DETAIL_ENTER_PX = 148;
+const LOD_DETAIL_EXIT_PX = 118;
 const MAX_WALL_ITEMS = 20000;
 const LAZY_CONCURRENCY_MAX = 24;
 
@@ -139,7 +142,9 @@ function mediaItem(fields) {
     published,
     indexed_on,
     filetype,
-    license
+    license,
+    thumbMaxEdge,
+    variantUrls
   } = fields;
   const mt = mediaType || classifyMedia(mime, url, title);
   let host = "";
@@ -148,7 +153,9 @@ function mediaItem(fields) {
   } catch {
     /* ignore */
   }
-  return {
+
+  /** @type {Record<string, unknown>} */
+  const out = {
     url,
     title: title || "",
     snippet: snippet || "",
@@ -163,6 +170,31 @@ function mediaItem(fields) {
     filetype: filetype || "",
     license: license || ""
   };
+
+  if (typeof thumbMaxEdge === "number" && Number.isFinite(thumbMaxEdge)) {
+    out.thumbMaxEdge = thumbMaxEdge;
+  }
+
+  if (Array.isArray(variantUrls) && variantUrls.length) {
+    const vs = variantUrls.filter((x) => x?.url && typeof x.url === "string").map((x) => ({
+      ...(typeof x.id === "string"
+        ? { id: x.id }
+        : {}),
+      ...(typeof x.role === "string"
+        ? { role: x.role }
+        : {}),
+      url: String(x.url),
+      ...(typeof x.maxEdge === "number"
+        ? { maxEdge: x.maxEdge }
+        : {}),
+      ...(typeof x.bytesHint === "number"
+        ? { bytesHint: x.bytesHint }
+        : {})
+    }));
+    if (vs.length) out.variantUrls = vs;
+  }
+
+  return /** @type {any} */ (out);
 }
 
 function acceptsMediaType(mt) {
@@ -236,7 +268,10 @@ async function searchWikimedia(query, maxItems, searchQuery) {
         snippet: "Wikimedia Commons",
         mime,
         mediaType: mt,
-        source: "wikimedia"
+        source: "wikimedia",
+        ...(mt === "image" || mt === "gif"
+          ? { thumbMaxEdge: 512 }
+          : {})
       }));
 
       if (results.length >= maxItems) return results;
@@ -547,19 +582,31 @@ function openDrawer(data) {
   selected = data;
   const mt = data.mediaType || "image";
   drawer.classList.add("open");
+  drawer.setAttribute("aria-hidden", "false");
+  document.body.classList.add("detail-open");
   drawer.innerHTML = `
-    <button type="button" class="close-btn" onclick="closeDrawer()">✕</button>
-    ${drawerPreview(data)}
-    <div class="meta drawer-meta-lite">
-      ${data.title ? `<p class="drawer-headline">${escapeHtml(data.title)}</p>` : ""}
-      ${data.snippet ? `<p class="drawer-snippet">${escapeHtml(data.snippet)}</p>` : ""}
-      <a class="open-link" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
-      <button type="button" class="drawer-tech-toggle" aria-expanded="false">Technical details</button>
-      <div id="drawerTech" class="drawer-tech" hidden>
-        <div id="drawerMeta" class="preview-meta-body">${formatDrawerMeta(data)}</div>
+    <div class="detail-backdrop" data-detail-close tabindex="-1"></div>
+    <div class="detail-panel">
+      <button type="button" class="detail-close" data-detail-close aria-label="Close preview">✕</button>
+      <div class="detail-layout">
+        <div class="detail-media">${drawerPreview(data)}</div>
+        <aside class="detail-meta drawer-meta-lite">
+          ${data.title ? `<p id="detailTitle" class="drawer-headline">${escapeHtml(data.title)}</p>` : ""}
+          ${data.snippet ? `<p class="drawer-snippet">${escapeHtml(data.snippet)}</p>` : ""}
+          <a class="open-link" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
+          <button type="button" class="drawer-tech-toggle" aria-expanded="false">Technical details</button>
+          <div id="drawerTech" class="drawer-tech" hidden>
+            <div id="drawerMeta" class="preview-meta-body">${formatDrawerMeta(data)}</div>
+          </div>
+        </aside>
       </div>
     </div>
   `;
+
+  drawer.querySelectorAll("[data-detail-close]").forEach((el) => {
+    el.addEventListener("click", () => window.closeDrawer());
+  });
+  drawer.querySelector(".detail-panel")?.addEventListener("click", (e) => e.stopPropagation());
 
   const techBtn = drawer.querySelector(".drawer-tech-toggle");
   const techWrap = drawer.querySelector("#drawerTech");
@@ -604,12 +651,13 @@ function destroyDrawerPlayback(data) {
 window.closeDrawer = () => {
   destroyDrawerPlayback(selected);
   drawer.classList.remove("open");
+  drawer.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("detail-open");
   selected = null;
 };
 
-// click canvas to close drawer
-canvas.addEventListener("pointerdown", () => {
-  if (drawer.classList.contains("open")) window.closeDrawer();
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && drawer.classList.contains("open")) window.closeDrawer();
 });
 
 // ==========================
@@ -640,6 +688,16 @@ function semanticEmbed(i, seed, itemKey) {
 // LAZY TEXTURE LOADER (incremental — reuses loaded thumbs)
 // ==========================
 let lazyGen = 0;
+let lodUpgradeInFlight = 0;
+
+function lodDetailConcurrency() {
+  const t = window.VWallPerfGuard?.getTier?.() ?? 0;
+  if (t >= 2) return 1;
+  if (t >= 1) return 2;
+  return 4;
+}
+
+
 let lazyInFlight = 0;
 let lazyQueue = [];
 const session = () => window.VWallSession;
@@ -704,7 +762,16 @@ async function lazyLoadThumb(entry, gen) {
   const container = entry.node;
   const mt = item.mediaType;
   const needsThumb = ["image", "gif", "video", "live"].includes(mt);
-  const thumb = item.thumbUrl || (["image", "gif"].includes(mt) ? item.url : null);
+
+  const ladder = global.VWallLadder?.ensureItemLadder?.(item);
+  const fullUrl =
+    (ladder?.fullTier && ladder.fullTier()?.url) ||
+    item.url ||
+    "";
+  const previewUrl =
+    (ladder?.cheapestPreviewTier && ladder.cheapestPreviewTier()?.url) ||
+    item.thumbUrl ||
+    (["image", "gif"].includes(mt) ? item.url : null);
 
   if (entry.thumbState === "loaded" && container._thumbLoaded) {
     session()?.bumpStats("cacheHits");
@@ -713,26 +780,28 @@ async function lazyLoadThumb(entry, gen) {
     return;
   }
 
-  if (!needsThumb || !thumb) {
+  if (!needsThumb || !previewUrl) {
     lazyMarkLoaded(entry, true);
     lazyProbeEntry(entry);
     return;
   }
 
   entry.thumbState = "loading";
+  const thumbAlias = `vwall:${session().key(item)}`;
   try {
     const tex = await PIXI.Assets.load({
-      src: thumb,
-      alias: `vwall:${session().key(item)}`,
+      src: previewUrl,
+      alias: thumbAlias,
       data: { crossOrigin: "anonymous" }
     });
-    if (gen !== lazyGen || !container?.parent) return;
+    if (gen !== lazyGen || !container?.parent) {
+      PIXI.Assets.unload(thumbAlias).catch(() => {});
+      return;
+    }
 
     container.removeChildren();
     const spr = new PIXI.Sprite(tex);
-    spr.width = 80;
-    spr.height = 80;
-    spr.anchor.set(0.5);
+    fitSpriteToThumbCell(spr, tex);
     const meta = MEDIA_META[mt] || MEDIA_META.image;
     const badge = new PIXI.Text(meta.label, {
       fontFamily: "monospace",
@@ -743,7 +812,21 @@ async function lazyLoadThumb(entry, gen) {
     badge.x = 38;
     badge.y = -36;
     container.addChild(spr, badge);
+    container._displaySprite = spr;
+    container._thumbTexture = tex;
+    container._thumbAlias = thumbAlias;
+    container._thumbPickedUrl = previewUrl;
+    container._detailAlias = null;
+    container._lod = "thumb";
     container._thumbLoaded = true;
+    container._canDetailLod =
+      mt === "image" &&
+      !!(
+        previewUrl &&
+        fullUrl &&
+        previewUrl !== fullUrl
+      );
+
     lazyMarkLoaded(entry, true);
     lazyProbeEntry(entry);
   } catch {
@@ -770,20 +853,165 @@ function lazyPump(gen) {
   }
 }
 
-function lazyEnqueuePending(gen, onlyNew = false) {
-  if (!onlyNew) {
-    lazyQueue = [];
-    lazyInFlight = 0;
-  }
-  const visible = new Set(session().displayOrder);
+function collectLazyPending(onlyNew = false) {
+  const out = [];
   for (const key of session().displayOrder) {
     const e = session().get(key);
     if (!e?.node) continue;
     if (e.thumbState === "loaded" || e.thumbState === "loading") continue;
     if (onlyNew && e.thumbState !== "idle" && e.thumbState !== "failed") continue;
-    lazyQueue.push({ entry: e });
+    out.push(e);
   }
+  return out;
+}
+
+function lazyEnqueuePending(gen, onlyNew = false) {
+  if (!onlyNew) {
+    lazyQueue = [];
+    lazyInFlight = 0;
+  }
+
+  const pending = collectLazyPending(onlyNew);
+
+  if (window.VWallStreamLoad?.isDesktopCanvas?.()) {
+    VWallStreamLoad.startLazyFeed(
+      gen,
+      pending,
+      (chunk, g) => {
+        for (const entry of chunk) lazyQueue.push({ entry });
+        lazyPump(g);
+      },
+      !!onlyNew
+    );
+    return;
+  }
+
+  for (const e of pending) lazyQueue.push({ entry: e });
   lazyPump(gen);
+}
+
+function fitSpriteToThumbCell(sprite, texture) {
+  const iw = texture?.width || 1;
+  const ih = texture?.height || 1;
+  const ss = TILE_SPRITE_PX / Math.max(iw, ih);
+  sprite.texture = texture;
+  sprite.width = iw * ss;
+  sprite.height = ih * ss;
+  sprite.anchor.set(0.5);
+}
+
+function approxSpriteScreenDiameter(sprite) {
+  if (!sprite?.texture?.baseTexture || !sprite.parent) return 0;
+  const wt = sprite.worldTransform;
+  const rw = Math.max(sprite.width || TILE_SPRITE_PX, 1);
+  const rh = Math.max(sprite.height || TILE_SPRITE_PX, 1);
+  const sx = Math.abs(wt.a) + Math.abs(wt.b);
+  const sy = Math.abs(wt.c) + Math.abs(wt.d);
+  return Math.max(rw * sx, rh * sy, 1e-6);
+}
+
+function downgradeLodTexture(container) {
+  if (
+    container._lod !== "detail" ||
+    !container._displaySprite ||
+    !container._thumbTexture
+  ) {
+    return;
+  }
+  const alias = container._detailAlias;
+  container._lod = "thumb";
+  container._detailAlias = null;
+  const spr = container._displaySprite;
+  spr.texture = container._thumbTexture;
+  fitSpriteToThumbCell(spr, container._thumbTexture);
+  if (alias) PIXI.Assets.unload(alias).catch(() => {});
+}
+
+async function upgradeLodToFullRes(entry, container, lg) {
+  const item = entry.item;
+  if (
+    item.mediaType !== "image" ||
+    !container._canDetailLod ||
+    !container._displaySprite ||
+    !container._thumbTexture
+  ) {
+    return;
+  }
+  if (container._lod === "detail" || container._lod === "detail-loading") return;
+
+  container._lod = "detail-loading";
+  const alias = `vwall:full:${entry.key}`;
+  const lad = global.VWallLadder?.ensureItemLadder?.(item);
+  const fullSrc = (lad?.fullTier && lad.fullTier()?.url) || item.url;
+  try {
+    const tex = await PIXI.Assets.load({
+      src: fullSrc,
+      alias,
+      data: { crossOrigin: "anonymous" }
+    });
+    if (
+      lg !== lazyGen ||
+      !container.parent ||
+      !container._displaySprite ||
+      entry.thumbState !== "loaded"
+    ) {
+      PIXI.Assets.unload(alias).catch(() => {});
+      container._lod = "thumb";
+      return;
+    }
+    const wScale = Math.max(Math.abs(world.scale.x), 1e-6);
+    if (TILE_SPRITE_PX * wScale < LOD_DETAIL_ENTER_PX * 0.88) {
+      PIXI.Assets.unload(alias).catch(() => {});
+      container._lod = "thumb";
+      return;
+    }
+    const spr = container._displaySprite;
+    fitSpriteToThumbCell(spr, tex);
+    container._detailAlias = alias;
+    container._lod = "detail";
+  } catch {
+    container._lod = "thumb";
+  }
+}
+
+function runTextureLodSweep() {
+  if (!window.VWallStreamLoad?.isDesktopCanvas?.()) return;
+  const lg = lazyGen;
+
+  /** @type {{ entry: any, container: PIXI.Container, px: number }[]} */
+  const upgrades = [];
+
+  for (let i = 0; i < nodes.length; i++) {
+    const container = nodes[i];
+    const key = container._sessionKey;
+    if (!key || !container._displaySprite || !container._canDetailLod) continue;
+    const entry = session().get(key);
+    if (!entry || entry.thumbState !== "loaded") continue;
+
+    const px = approxSpriteScreenDiameter(container._displaySprite);
+
+    if (container._lod === "detail") {
+      if (px < LOD_DETAIL_EXIT_PX) downgradeLodTexture(container);
+      continue;
+    }
+    if (container._lod === "detail-loading") continue;
+    if (container._lod !== "thumb") continue;
+
+    if (px >= LOD_DETAIL_ENTER_PX) upgrades.push({ entry, container, px });
+  }
+
+  upgrades.sort((a, b) => b.px - a.px);
+  while (
+    lodUpgradeInFlight < lodDetailConcurrency() &&
+    upgrades.length > 0
+  ) {
+    const job = upgrades.shift();
+    if (!job.container.parent || job.container._lod !== "thumb") continue;
+    lodUpgradeInFlight++;
+    upgradeLodToFullRes(job.entry, job.container, lg).finally(() => {
+      lodUpgradeInFlight = Math.max(0, lodUpgradeInFlight - 1);
+    });
+  }
 }
 
 function layoutPosition(i, n) {
@@ -816,7 +1044,63 @@ function remountScrollWall() {
   VWallScroll.mount(entries);
 }
 
-function mountDisplayEntries(entries) {
+function mountWallNode(item, opts = {}) {
+  const { entry: e, emb, pos } = item;
+  const { bx, by } = pos;
+
+  if (e.node && e.node._thumbLoaded) {
+    session().bumpStats("reusedNodes");
+    e.node.baseX = bx;
+    e.node.baseY = by;
+    e.node.x = bx;
+    e.node.y = by;
+    e.node.cluster = emb.cluster;
+    e.node.clusterLabel = emb.clusterLabel;
+    e.node.alpha = 1;
+    delete e.node._streamFade;
+    if (!e.node.parent) world.addChild(e.node);
+    nodes.push(e.node);
+    return;
+  }
+
+  if (e.node) {
+    e.node.destroy({ children: true });
+  }
+  e.node = createWallNode(e.item, bx, by, emb);
+  e.node.probeMeta = e.probeMeta;
+  if (opts.fadeIn) {
+    e.node.alpha = 0;
+    e.node._streamFade = true;
+  }
+  world.addChild(e.node);
+  session().bumpStats("newNodes");
+  nodes.push(e.node);
+}
+
+async function trimDisplayEntries(keepKeys) {
+  if (window.VWallScroll?.useScrollWall()) {
+    let list = session().getDisplayEntries(getWallCount());
+    list = sortDisplayEntries(applyMetaFilter(list));
+    list = list.filter((e) => keepKeys.has(e.key));
+    session().setDisplayKeys(list.map((e) => e.key));
+    VWallScroll.mount(list);
+    return;
+  }
+
+  for (const [, e] of session().byKey) {
+    if (e.node?.parent && !keepKeys.has(e.key)) {
+      world.removeChild(e.node);
+    }
+  }
+  nodes = [];
+  for (const key of session().displayOrder) {
+    if (!keepKeys.has(key)) continue;
+    const e = session().get(key);
+    if (e?.node?.parent) nodes.push(e.node);
+  }
+}
+
+async function mountDisplayEntries(entries, opts = {}) {
   const scrollMode = window.VWallScroll?.useScrollWall();
   if (scrollMode) {
     canvas.style.display = "none";
@@ -829,7 +1113,14 @@ function mountDisplayEntries(entries) {
         e.node.clusterLabel = emb.clusterLabel;
       }
     });
-    VWallScroll.mount(entries);
+    if (!opts.extendOnly) VWallScroll.mount(entries);
+    else {
+      entries.forEach((e, i) => {
+        const emb = semanticEmbed((opts.indexOffset ?? 0) + i, seed, e.key);
+        e.item.genre = emb.clusterLabel;
+      });
+      VWallScroll.mount(session().getDisplayEntries(opts.total ?? getWallCount()));
+    }
     return;
   }
 
@@ -837,43 +1128,58 @@ function mountDisplayEntries(entries) {
   app.view.style.pointerEvents = "auto";
   if (drawer.classList.contains("open")) window.closeDrawer?.();
 
-  const visible = new Set(entries.map((e) => e.key));
-  nodes = [];
+  const indexOffset = opts.indexOffset ?? 0;
+  const total = opts.total ?? entries.length + indexOffset;
 
-  entries.forEach((e, i) => {
-    const emb = semanticEmbed(i, seed, e.key);
-    e.item.genre = emb.clusterLabel;
-    const { bx, by } = layoutPosition(i, entries.length);
+  if (!opts.extendOnly) {
+    window.VWallStreamLoad?.cancel?.();
+    const visible = new Set(entries.map((e) => e.key));
+    nodes = [];
 
-    if (e.node && e.node._thumbLoaded) {
-      session().bumpStats("reusedNodes");
-      e.node.baseX = bx;
-      e.node.baseY = by;
-      e.node.x = bx;
-      e.node.y = by;
-      e.node.cluster = emb.cluster;
-      e.node.clusterLabel = emb.clusterLabel;
-      if (!e.node.parent) world.addChild(e.node);
-      nodes.push(e.node);
-      return;
-    }
-
-    if (e.node) {
-      e.node.destroy({ children: true });
-    }
-    e.node = createWallNode(e.item, bx, by, emb);
-    e.node.probeMeta = e.probeMeta;
-    world.addChild(e.node);
-    session().bumpStats("newNodes");
-    nodes.push(e.node);
-  });
-
-  for (const [, e] of session().byKey) {
-    if (e.node && !visible.has(e.key) && e.node.parent) {
-      world.removeChild(e.node);
+    for (const [, e] of session().byKey) {
+      if (e.node && !visible.has(e.key) && e.node.parent) {
+        world.removeChild(e.node);
+      }
     }
   }
+
+  const prepared = entries.map((e, i) => {
+    const idx = indexOffset + i;
+    const emb = semanticEmbed(idx, seed, e.key);
+    e.item.genre = emb.clusterLabel;
+    return {
+      entry: e,
+      emb,
+      pos: layoutPosition(idx, total),
+      i: idx
+    };
+  });
+
+  const ready = [];
+  const stream = [];
+  for (const item of prepared) {
+    if (item.entry.node?._thumbLoaded) ready.push(item);
+    else stream.push(item);
+  }
+
+  for (const item of ready) mountWallNode(item);
+
+  if (stream.length && window.VWallStreamLoad) {
+    await VWallStreamLoad.mountInWaves(stream, mountWallNode, gridMode, {
+      mountOrder: global.VWallLadder?.ORDER_FIFO ?? "fifo"
+    });
+  } else if (stream.length) {
+    for (const item of stream) mountWallNode(item);
+  }
 }
+
+window.onStreamMountWave = ({ done, total }) => {
+  const el = document.getElementById("searchStatus");
+  if (!el || total <= 52) return;
+  const base = el.textContent.replace(/\s*·\s*wave\s+\d+\/\d+$/i, "");
+  el.textContent = `${base} · wave ${done}/${total}`;
+  el.classList.add("show-mobile-status");
+};
 
 function getMetaSearchQuery() {
   return document.getElementById("metaSearch")?.value?.trim() || "";
@@ -913,6 +1219,8 @@ async function syncUniverse(query, opts = {}) {
   const extendOnly = opts.extendOnly === true;
   const filterOnly = opts.filterOnly === true;
   const queryChanged = q !== session().lastQuery && !filterOnly;
+  const incrementalCount =
+    extendOnly && !queryChanged && !filterOnly && !layoutOnly;
 
   session().stats = { cacheHits: 0, reusedNodes: 0, newNodes: 0, skippedProbes: 0 };
 
@@ -922,15 +1230,24 @@ async function syncUniverse(query, opts = {}) {
     );
     entries = sortDisplayEntries(entries);
     session().setDisplayKeys(entries.map((e) => e.key));
-    mountDisplayEntries(entries);
+    await mountDisplayEntries(entries);
     return;
   }
 
-  lazyGen++;
+  if (!incrementalCount) {
+    lazyGen++;
+    window.VWallStreamLoad?.cancel?.();
+  }
   const lazyGenLocal = lazyGen;
   searchBtn.disabled = true;
   const statusQ = parsed.scoped ? searchLabel : q;
-  setSearchStatus(queryChanged ? `Searching “${statusQ}”…` : `Extending “${statusQ}”…`);
+  setSearchStatus(
+    queryChanged
+      ? `Searching “${statusQ}”…`
+      : incrementalCount
+        ? `Adding more…`
+        : `Updating “${statusQ}”…`
+  );
 
   if (activeMediaTypes.size === 0) {
     setSearchStatus("Enable at least one media type");
@@ -940,6 +1257,7 @@ async function syncUniverse(query, opts = {}) {
 
   session().lastQuery = q;
   let displayKeys = filterOnly ? [] : [...session().displayOrder];
+  const keysBeforeFetch = incrementalCount ? new Set(displayKeys) : null;
 
   if (queryChanged) {
     displayKeys = [];
@@ -984,9 +1302,13 @@ async function syncUniverse(query, opts = {}) {
 
   session().setDisplayKeys(displayKeys.slice(0, count));
   let entries = session().getDisplayEntries(count);
-  entries = sortDisplayEntries(entries);
-  session().setDisplayKeys(entries.map((e) => e.key));
-  entries = applyMetaFilter(entries);
+  if (!incrementalCount) {
+    entries = sortDisplayEntries(entries);
+    session().setDisplayKeys(entries.map((e) => e.key));
+    entries = applyMetaFilter(entries);
+  } else {
+    entries = applyMetaFilter(entries);
+  }
 
   if (!entries.length) {
     setSearchStatus(`No results for “${q}”`);
@@ -1001,20 +1323,45 @@ async function syncUniverse(query, opts = {}) {
 
   if (window.VWallMetrics) {
     const loaded = entries.filter((e) => e.thumbState === "loaded").length;
-    VWallMetrics.resetCounts(entries.length, tallies);
-    const wm = VWallMetrics.wallMetrics;
-    wm.loaded = loaded;
-    wm.pending = Math.max(0, entries.length - loaded - wm.failed);
-    for (const e of entries) {
-      if (e.thumbState === "loaded") {
-        wm.loadedByType[e.item.mediaType] = (wm.loadedByType[e.item.mediaType] || 0) + 1;
+    if (incrementalCount) {
+      const wm = VWallMetrics.wallMetrics;
+      wm.total = entries.length;
+      wm.pending = Math.max(0, entries.length - wm.loaded - wm.failed);
+      for (const t of MEDIA_TYPES) wm.byType[t] = tallies[t] || 0;
+    } else {
+      VWallMetrics.resetCounts(entries.length, tallies);
+      const wm = VWallMetrics.wallMetrics;
+      wm.loaded = loaded;
+      wm.pending = Math.max(0, entries.length - loaded - wm.failed);
+      for (const e of entries) {
+        if (e.thumbState === "loaded") {
+          wm.loadedByType[e.item.mediaType] = (wm.loadedByType[e.item.mediaType] || 0) + 1;
+        }
       }
     }
+    VWallMetrics.render();
   }
 
-  mountDisplayEntries(entries);
+  if (incrementalCount) {
+    const trimKeys = new Set(entries.map((e) => e.key));
+    await trimDisplayEntries(trimKeys);
+    const newEntries = entries.filter((e) => keysBeforeFetch && !keysBeforeFetch.has(e.key));
+    if (newEntries.length) {
+      const indexOffset = entries.length - newEntries.length;
+      await mountDisplayEntries(newEntries, {
+        extendOnly: true,
+        indexOffset,
+        total: entries.length
+      });
+    }
+    lazyEnqueuePending(lazyGenLocal, true);
+    searchBtn.disabled = false;
+    return;
+  }
+
+  await mountDisplayEntries(entries);
   searchBtn.disabled = false;
-  lazyEnqueuePending(lazyGenLocal, extendOnly || need > 0);
+  lazyEnqueuePending(lazyGenLocal, need > 0);
 }
 
 async function buildUniverse(query, opts) {
@@ -1071,6 +1418,13 @@ function createWallNode(item, bx, by, emb) {
   container.blendMode = blendEnabled ? PIXI.BLEND_MODES.ADD : PIXI.BLEND_MODES.NORMAL;
   container.eventMode = "static";
   container.cursor = "pointer";
+  container._sessionKey = session().key(item);
+  container._lod = "placeholder";
+  container._displaySprite = null;
+  container._thumbTexture = null;
+  container._thumbAlias = null;
+  container._detailAlias = null;
+  container._canDetailLod = false;
   container.on("pointertap", () =>
     openPreview({
       url: container.url,
@@ -1161,6 +1515,7 @@ window.reseed = async () => {
 // ==========================
 let scale = 1;
 let targetScale = 1;
+let lodSweepAcc = 0;
 
 window.addEventListener("wheel", e => {
   targetScale *= e.deltaY > 0 ? 0.9 : 1.1;
@@ -1208,22 +1563,33 @@ app.ticker.add(() => {
       n.y = n.baseY;
       n.alpha = 1;
     }
-    return;
+  } else {
+    const t = performance.now() * 0.001;
+
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      n.x = n.baseX + Math.sin(n.cluster * 0.5 + t * 0.5 + i * 0.1) * driftAmt;
+      n.y = n.baseY + Math.cos(n.cluster * 0.5 + t * 0.5 + i * 0.1) * driftAmt;
+
+      if (n._streamFade) {
+        n.alpha = Math.min(1, n.alpha + 0.12);
+        if (n.alpha >= 0.99) delete n._streamFade;
+      }
+
+      if (useBlur) {
+        const dist = Math.hypot(n.x, n.y);
+        const blurA = Math.max(0.15, 1 - dist / 1500);
+        n.alpha = n._streamFade ? Math.min(n.alpha, blurA) : blurA;
+      } else if (!n._streamFade) {
+        n.alpha = 1;
+      }
+    }
   }
 
-  const t = performance.now() * 0.001;
-
-  for (let i = 0; i < nodes.length; i++) {
-    const n = nodes[i];
-    n.x = n.baseX + Math.sin(n.cluster * 0.5 + t * 0.5 + i * 0.1) * driftAmt;
-    n.y = n.baseY + Math.cos(n.cluster * 0.5 + t * 0.5 + i * 0.1) * driftAmt;
-
-    if (useBlur) {
-      const dist = Math.hypot(n.x, n.y);
-      n.alpha = Math.max(0.15, 1 - dist / 1500);
-    } else {
-      n.alpha = 1;
-    }
+  lodSweepAcc++;
+  if (lodSweepAcc >= 22) {
+    lodSweepAcc = 0;
+    runTextureLodSweep();
   }
 });
 
@@ -1308,11 +1674,11 @@ if (window.VWallScroll) {
   };
   globalThis.matchMedia(
     window.VWallScroll?.SCROLL_WALL_MQ ?? "(max-width: 899px), (max-height: 620px)"
-  ).addEventListener("change", () => {
+  ).addEventListener("change", async () => {
     let entries = session().getDisplayEntries(getWallCount());
     entries = sortDisplayEntries(entries);
     entries = applyMetaFilter(entries);
-    mountDisplayEntries(entries);
+    await mountDisplayEntries(entries);
   });
 }
 
@@ -1363,7 +1729,7 @@ async function applyPerfTierChange(_tier, tierInfo, reason) {
       let entries = session().getDisplayEntries(cap);
       entries = sortDisplayEntries(entries);
       entries = applyMetaFilter(entries);
-      mountDisplayEntries(entries);
+      await mountDisplayEntries(entries);
       lazyGen++;
       lazyEnqueuePending(lazyGen, false);
     }

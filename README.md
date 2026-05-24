@@ -29,7 +29,7 @@ Search uses public APIs only (no keys): **Wikimedia Commons** + **Openverse** (i
 
 Header chips filter by type: **image**, **gif**, **video**, **live** (HLS/m3u8), **gsplat** (`.ply` / `.splat`), **audio**.
 
-**Sort → By media type** groups results on the wall by type. Click a tile to preview (video/audio/live in the drawer; HLS via hls.js).
+**Sort → By media type** groups results on the wall by type. Click a tile to preview (desktop: centered lightbox; mobile browse: bottom sheet; HLS via hls.js).
 
 Up to **20,000** items via the count slider (lazy-loaded thumbnails). Very large counts are heavy on GPU/RAM.
 
@@ -40,6 +40,12 @@ Live **FPS**, memory, load queue, per-type counts, and **buffer estimates** (vid
 ### Incremental session (Bridge-style)
 
 VWall **keeps** loaded thumbnails, probes, and Pixi nodes in a session cache. Raising the count **extends** the wall (only fetches new URLs). Layout / reseed / sort **reposition** without refetching. Status shows `reused` vs `new` counts.
+
+**Desktop wall (Pixi):** thumbnails load first (`thumbUrl`, or the main URL when no separate thumb exists). While you zoom and pan the mosaic, tiles that span enough **screen pixels** and have a distinct full-size URL can **upgrade in place** to the original image (still letterboxed inside the tile), then automatically **unload** that heavier texture again when zoomed back out — similar in spirit to a coarse “overview” atlas with on-demand sharper layers, minus true lightfield mip chains.
+
+**Load order:** new sessions mount tiles roughly **first-come / first-serve** in display sequence (rather than reordering every batch by on-screen proximity). Incremental bumps **append** to the thumbnail pump when work is already in flight so URLs mid-buffer/decode aren’t flushed for no reason (“rolling shutter” / old-internet pacing at scale).
+
+**Resolution ladder (`media-ladder.js`):** ingestion can attach `variantUrls` (array of `{ url, role?, maxEdge?, bytesHint?, id? }`) plus optional `thumbMaxEdge`. Preview picks the **cheapest tier** (`cheapestPreviewTier`); LOD upgrade resolves the **full** tier. That is tooling for manifest-style “data lake” URLs (CDN size ladders, IIIF width tiers, tiled rasters later) until true mip pyramids or server tiling land.
 
 ### Metadata search (footer)
 
@@ -74,6 +80,7 @@ In the repo **Settings → Pages**, set **Build and deployment → Source** to *
 | File | Description |
 |------|-------------|
 | `index.html` | Main 3D wall |
+| `media-ladder.js` | Multi-URL ladder (`variantUrls`) for previews vs full-res |
 | `visualwall.html` | Color-sorted grid |
 | `focus.html` | Single-image focus view |
 

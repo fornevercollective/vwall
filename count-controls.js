@@ -55,12 +55,14 @@
       return c;
     }
 
-    function scheduleApply(extendOnly) {
+    function scheduleApply(forcedExtend) {
       clearTimeout(applyTimer);
       applyTimer = setTimeout(() => {
-        const extend = clamp(input.value) > lastCount;
-        lastCount = clamp(input.value);
-        onApply?.({ extendOnly: extendOnly ?? extend });
+        const c = clamp(input.value);
+        const extend =
+          forcedExtend === true ? true : forcedExtend === false ? false : c > lastCount;
+        lastCount = c;
+        onApply?.({ extendOnly: extend });
       }, 400);
     }
 
@@ -87,7 +89,7 @@
 
     slider.addEventListener("input", () => {
       syncUi(slider.value);
-      scheduleApply(true);
+      scheduleApply();
     });
 
     input.addEventListener("change", () => {
