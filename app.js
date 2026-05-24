@@ -35,7 +35,11 @@ let seed = 0;
 
 const CELL_SIZE = 90;
 const MAX_WALL_ITEMS = 20000;
-const LAZY_CONCURRENCY = 24;
+const LAZY_CONCURRENCY_MAX = 24;
+
+function lazyConcurrency() {
+  return window.VWallPerfGuard?.getLazyConcurrency?.() ?? LAZY_CONCURRENCY_MAX;
+}
 const API_CACHE_TTL_MS = 120000;
 const apiResultCache = new Map();
 
@@ -710,7 +714,8 @@ async function lazyLoadThumb(entry, gen) {
 
 function lazyPump(gen) {
   const m = VWallMetrics?.wallMetrics;
-  while (lazyInFlight < LAZY_CONCURRENCY && lazyQueue.length && gen === lazyGen) {
+  const maxLazy = lazyConcurrency();
+  while (lazyInFlight < maxLazy && lazyQueue.length && gen === lazyGen) {
     const job = lazyQueue.shift();
     lazyInFlight++;
     if (m) {
@@ -1146,20 +1151,35 @@ window.addEventListener("pointermove", e => {
 // ==========================
 app.ticker.add(() => {
   if (window.VWallMetrics) VWallMetrics.tickFrame();
+  if (window.VWallPerfGuard) VWallPerfGuard.recordFrameDelta();
   if (window.VWallScroll?.useScrollWall()) return;
 
   scale += (targetScale - scale) * 0.08;
   world.scale.set(scale);
 
+  const guard = window.VWallPerfGuard;
+  const animate = guard?.shouldAnimateNodes?.() !== false;
+  const driftAmt = guard?.getDrift?.(gridMode) ?? (gridMode ? 3 : 15);
+  const useBlur = blurEnabled && !(guard?.shouldAutoDisableBlur?.() && !guard?.isOverride?.());
+
+  if (!animate) {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      n.x = n.baseX;
+      n.y = n.baseY;
+      n.alpha = 1;
+    }
+    return;
+  }
+
   const t = performance.now() * 0.001;
 
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
-    const drift = gridMode ? 3 : 15;
-    n.x = n.baseX + Math.sin(n.cluster * 0.5 + t * 0.5 + i * 0.1) * drift;
-    n.y = n.baseY + Math.cos(n.cluster * 0.5 + t * 0.5 + i * 0.1) * drift;
+    n.x = n.baseX + Math.sin(n.cluster * 0.5 + t * 0.5 + i * 0.1) * driftAmt;
+    n.y = n.baseY + Math.cos(n.cluster * 0.5 + t * 0.5 + i * 0.1) * driftAmt;
 
-    if (blurEnabled) {
+    if (useBlur) {
       const dist = Math.hypot(n.x, n.y);
       n.alpha = Math.max(0.15, 1 - dist / 1500);
     } else {
@@ -1235,8 +1255,8 @@ if (window.VWallScroll) {
     const q = document.getElementById("search").value.trim() || session().lastQuery;
     const current = session().displayOrder.length;
     if (current >= MAX_WALL_ITEMS) return;
-    const bump = Math.min(250, MAX_WALL_ITEMS - current);
-    const next = Math.min(getWallCount() + bump, MAX_WALL_ITEMS);
+    const bump = window.VWallPerfGuard?.getExtendBump?.() ?? 250;
+    const next = Math.min(getUserWallCount() + bump, MAX_WALL_ITEMS);
     if (window.VWallCount) VWallCount.setCount(next);
     else {
       const input = document.getElementById("countInput");
@@ -1259,12 +1279,63 @@ buildUniverse(null);
 // ==========================
 // COUNT CONTROLS
 // ==========================
-function getWallCount() {
+function getUserWallCount() {
   if (window.VWallCount) return VWallCount.getCount();
   const input = document.getElementById("countInput");
   const slider = document.getElementById("countSlider");
   return parseInt(input?.value || slider?.value, 10) || 1000;
 }
+
+function getWallCount() {
+  const user = getUserWallCount();
+  if (window.VWallPerfGuard) return VWallPerfGuard.capCount(user);
+  return user;
+}
+
+function applyPerfBlurPolicy() {
+  const guard = window.VWallPerfGuard;
+  if (!guard?.shouldAutoDisableBlur?.() || guard.isOverride()) return;
+  if (!blurEnabled) return;
+  blurEnabled = false;
+  document.getElementById("blurBtn").innerText = "Blur: OFF";
+  document.getElementById("blurBtn")?.classList.remove("active");
+}
+
+async function applyPerfTierChange(_tier, tierInfo, reason) {
+  if (applying) return;
+  applying = true;
+  try {
+    const q = document.getElementById("search")?.value?.trim() || session().lastQuery || null;
+
+    if (reason === "turbo-on") {
+      await syncUniverse(q);
+      return;
+    }
+
+    applyPerfBlurPolicy();
+    const cap = getWallCount();
+    const order = session().displayOrder;
+    if (order.length > cap) {
+      session().setDisplayKeys(order.slice(0, cap));
+      const q = document.getElementById("search")?.value?.trim() || session().lastQuery || null;
+      let entries = session().getDisplayEntries(cap);
+      entries = sortDisplayEntries(entries);
+      entries = applyMetaFilter(entries);
+      mountDisplayEntries(entries);
+      lazyGen++;
+      lazyEnqueuePending(lazyGen, false);
+    }
+    const status = document.getElementById("searchStatus");
+    if (status && tierInfo.id > 0 && reason !== "recovered") {
+      status.textContent = `Perf ${tierInfo.label}: capped at ${tierInfo.countCap} items — Turbo to override`;
+      status.classList.add("show-mobile-status");
+    }
+  } finally {
+    applying = false;
+  }
+}
+
+window.onPerfTierChange = applyPerfTierChange;
 
 if (window.VWallCountPresets) {
   VWallCountPresets.initCountControls(async (opts) => {

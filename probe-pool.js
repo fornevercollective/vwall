@@ -4,7 +4,9 @@
 (function (global) {
   const cache = new Map();
   const inFlight = new Map();
-  const CLUSTER = 4;
+  function clusterSize() {
+    return global.VWallPerfGuard?.getProbeConcurrency?.() ?? 4;
+  }
 
   async function probeCached(item, force) {
     const key = global.VWallCatalog?.itemKey(item) || `${item.mediaType}:${item.url}`;
@@ -37,7 +39,7 @@
 
   async function probeMany(items, onDone) {
     const q = [...items];
-    const workers = Array.from({ length: CLUSTER }, async () => {
+    const workers = Array.from({ length: clusterSize() }, async () => {
       while (q.length) {
         const item = q.shift();
         if (!item) break;

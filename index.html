@@ -92,6 +92,7 @@
         <button type="button" id="blurBtn" class="touch-target">Blur: OFF</button>
         <button type="button" id="blendBtn" class="touch-target">Blend: OFF</button>
         <button type="button" id="reseedBtn" class="touch-target">Reseed</button>
+        <button type="button" id="perfOverrideBtn" class="touch-target perf-override-btn" title="Disable auto performance limits when the machine is struggling">Turbo: OFF</button>
       </div>
     </section>
     </div>
@@ -112,7 +113,8 @@
   <div class="metric-row"><span>Buffer est.</span><strong id="mBuffer" class="metric-wide">—</strong></div>
   <div class="metric-row"><span>Probe</span><strong id="mProbe" class="metric-wide">—</strong></div>
   <div class="metric-row"><span>Cache</span><strong id="mCache" class="metric-wide">—</strong></div>
-  <p class="metrics-hint">Run <code>mustream probe-serve</code> for ffprobe / EXIF.</p>
+  <div class="metric-row"><span>Perf guard</span><strong id="mPerfGuard" class="metric-wide">—</strong></div>
+  <p class="metrics-hint">Run <code>mustream probe-serve</code> for ffprobe / EXIF. <code>Turbo</code> skips auto limits.</p>
 </aside>
 
 <div id="scrollViewport" class="scroll-viewport" aria-label="Media wall">
@@ -158,6 +160,7 @@
 <script src="probe-pool.js"></script>
 <script src="metadata.js"></script>
 <script src="metrics.js"></script>
+<script src="perf-guard.js"></script>
 <script src="scroll-wall.js"></script>
 <script src="app.js"></script>
 </body>

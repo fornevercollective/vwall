@@ -27,7 +27,7 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html app.js styles.css visualwall.html focus.html LICENSE \
-            nav.js count-controls.js search-query.js session.js sort.js catalog.js analyzers.js probe-pool.js metadata.js metrics.js scroll-wall.js _site/
+            nav.js count-controls.js search-query.js session.js sort.js catalog.js analyzers.js probe-pool.js metadata.js perf-guard.js scroll-wall.js _site/
           cp -r editor _site/
           touch _site/.nojekyll
 

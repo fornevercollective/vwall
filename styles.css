@@ -631,6 +631,21 @@ body.sheet-open .top-chrome {
   border-color: #555;
 }
 
+.perf-override-btn.active {
+  border-color: #7a6a3a;
+  background: color-mix(in srgb, #aa8833 22%, #222);
+  color: #ffe8a8;
+}
+
+body.perf-guard-active #perfOverrideBtn:not(.active) {
+  border-color: rgba(136, 170, 255, 0.35);
+}
+
+body.perf-tier-critical .view-tools #blurBtn,
+body.perf-tier-critical .view-tools #blendBtn {
+  opacity: 0.55;
+}
+
 #metricsPanel {
   position: fixed;
   top: var(--header-h, 76px);
