@@ -65,6 +65,62 @@
       .toLowerCase();
   }
 
+  function framingKeyOf(entry) {
+    const s = summary(entry);
+    const w = Number(s.width) || 0;
+    const h = Number(s.height) || 0;
+    if (!w || !h) return "4:unknown";
+    const ratio = w / h;
+    if (ratio >= 2.1) return "0:ultrawide";
+    if (ratio >= 1.35) return "1:landscape";
+    if (ratio <= 0.7) return "3:portrait";
+    return "2:square";
+  }
+
+  function cameraAngleKeyOf(entry) {
+    const s = summary(entry);
+    const it = itemOf(entry);
+    const corpus = [
+      s.camera_angle,
+      s.viewpoint,
+      s.description,
+      it.title,
+      it.snippet
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!corpus) return "9:unknown";
+    if (/(aerial|drone|bird'?s[- ]eye|top[- ]down|overhead)/.test(corpus)) return "0:top";
+    if (/(low[- ]angle|worm'?s[- ]eye|upward|from below)/.test(corpus)) return "1:low";
+    if (/(high[- ]angle|looking down|from above)/.test(corpus)) return "2:high";
+    if (/(close[- ]up|macro|detail shot)/.test(corpus)) return "3:close";
+    if (/(wide shot|establishing|panorama|long shot)/.test(corpus)) return "4:wide";
+    return "5:neutral";
+  }
+
+  function positionKeyOf(entry) {
+    const s = summary(entry);
+    const it = itemOf(entry);
+    const corpus = [
+      s.position,
+      s.subject_position,
+      s.camera_position,
+      it.title,
+      it.snippet
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (!corpus) return "9:unknown";
+    if (/(center|centred|centered|middle)/.test(corpus)) return "0:center";
+    if (/(left|left-side|left side)/.test(corpus)) return "1:left";
+    if (/(right|right-side|right side)/.test(corpus)) return "2:right";
+    if (/(foreground|front)/.test(corpus)) return "3:front";
+    if (/(background|rear|back)/.test(corpus)) return "4:back";
+    return "5:mixed";
+  }
+
   function sourceKeyOf(entry) {
     const it = itemOf(entry);
     return (it.source || it.provider || it.host || "").toLowerCase();
@@ -130,6 +186,15 @@
         break;
       case "exif":
         sorted.sort((a, b) => cmpStr(exifKeyOf(a), exifKeyOf(b)));
+        break;
+      case "framing":
+        sorted.sort((a, b) => cmpStr(framingKeyOf(a), framingKeyOf(b)));
+        break;
+      case "camera-angle":
+        sorted.sort((a, b) => cmpStr(cameraAngleKeyOf(a), cameraAngleKeyOf(b)));
+        break;
+      case "position":
+        sorted.sort((a, b) => cmpStr(positionKeyOf(a), positionKeyOf(b)));
         break;
       case "format":
         sorted.sort((a, b) => cmpStr(formatKeyOf(a), formatKeyOf(b)));

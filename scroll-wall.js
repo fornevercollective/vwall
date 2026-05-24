@@ -9,6 +9,8 @@
   let selectedKey = null;
   let genreRailShellReady = false;
   let genreRailCollapsed = false;
+  let inlineDetailsOpen = false;
+  let pullRefreshBusy = false;
 
   try {
     genreRailCollapsed = localStorage.getItem("vwallGenreRailCollapsed") === "1";
@@ -97,12 +99,19 @@
         <span class="media-badge" style="background:${meta.color}">${meta.label}</span>
         ${data.title ? `<p class="preview-title">${escapeHtml(data.title)}</p>` : ""}
         <p class="preview-genre">${escapeHtml(data.clusterLabel || "")}</p>
-        <div id="inlinePreviewMeta" class="preview-meta-body"><p class="hint">Loading metadata…</p></div>
-        <a class="open-link" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
+        <button type="button" class="inline-preview-details-toggle" aria-expanded="false">Show details</button>
+        <div class="inline-preview-details" hidden>
+          <div id="inlinePreviewMeta" class="preview-meta-body"><p class="hint">Loading metadata…</p></div>
+          <a class="open-link" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
+        </div>
       </div>
     `;
 
     panel.querySelector(".inline-preview-close")?.addEventListener("click", closeInlinePreview);
+    panel.querySelector(".inline-preview-details-toggle")?.addEventListener("click", () => {
+      setInlineDetailsOpen(!inlineDetailsOpen);
+    });
+    setInlineDetailsOpen(false);
 
     if (mt === "live" && data.url.includes(".m3u8") && global.Hls?.isSupported()) {
       const video = document.getElementById("inlinePreviewVideo");
@@ -136,6 +145,19 @@
     panel?.classList.remove("open");
     panel?.setAttribute("aria-hidden", "true");
     selectedKey = null;
+  }
+
+  function setInlineDetailsOpen(open) {
+    const panel = document.getElementById("inlinePreview");
+    if (!panel) return;
+    inlineDetailsOpen = open;
+    const details = panel.querySelector(".inline-preview-details");
+    const toggle = panel.querySelector(".inline-preview-details-toggle");
+    if (details) details.hidden = !open;
+    if (toggle) {
+      toggle.textContent = open ? "Hide details" : "Show details";
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
   }
 
   function entryPayload(e) {
@@ -283,6 +305,88 @@
     };
   }
 
+  function pullRefreshLabel(distance) {
+    if (pullRefreshBusy) return "Refreshing…";
+    return distance >= 88 ? "Release to refresh" : "Pull to refresh";
+  }
+
+  function ensurePullRefreshHint(viewport) {
+    if (!viewport || viewport.querySelector(".pull-refresh-hint")) return;
+    const hint = document.createElement("div");
+    hint.className = "pull-refresh-hint";
+    hint.textContent = "Pull to refresh";
+    viewport.prepend(hint);
+  }
+
+  function refreshCurrentSearch() {
+    if (pullRefreshBusy) return;
+    pullRefreshBusy = true;
+    const input = document.getElementById("search");
+    const q = input?.value?.trim() || global.VWallSession?.lastQuery || "";
+    if (q && input) input.value = q;
+    const done = () => {
+      pullRefreshBusy = false;
+      const viewport = document.getElementById("scrollViewport");
+      viewport?.classList.remove("pull-refresh-active", "pull-refresh-armed");
+      viewport?.style.removeProperty("--pull-distance");
+      const hint = viewport?.querySelector(".pull-refresh-hint");
+      if (hint) hint.textContent = "Pull to refresh";
+    };
+    if (q && typeof global.runSearch === "function") {
+      Promise.resolve(global.runSearch()).finally(done);
+      return;
+    }
+    global.location.reload();
+  }
+
+  function initPullToRefresh() {
+    const viewport = document.getElementById("scrollViewport");
+    if (!viewport) return;
+    ensurePullRefreshHint(viewport);
+
+    let active = false;
+    let startY = 0;
+    let distance = 0;
+    let armed = false;
+
+    viewport.addEventListener("touchstart", (e) => {
+      if (!useScrollWall() || pullRefreshBusy) return;
+      if (viewport.scrollTop > 0) return;
+      if (!e.touches || e.touches.length !== 1) return;
+      active = true;
+      armed = false;
+      distance = 0;
+      startY = e.touches[0].clientY;
+    }, { passive: true });
+
+    viewport.addEventListener("touchmove", (e) => {
+      if (!active || pullRefreshBusy) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy <= 0) return;
+      distance = Math.min(120, dy * 0.65);
+      armed = distance >= 88;
+      viewport.classList.add("pull-refresh-active");
+      viewport.classList.toggle("pull-refresh-armed", armed);
+      viewport.style.setProperty("--pull-distance", `${distance}px`);
+      const hint = viewport.querySelector(".pull-refresh-hint");
+      if (hint) hint.textContent = pullRefreshLabel(distance);
+      e.preventDefault();
+    }, { passive: false });
+
+    viewport.addEventListener("touchend", () => {
+      if (!active) return;
+      active = false;
+      if (armed) {
+        refreshCurrentSearch();
+        return;
+      }
+      viewport.classList.remove("pull-refresh-active", "pull-refresh-armed");
+      viewport.style.removeProperty("--pull-distance");
+      const hint = viewport.querySelector(".pull-refresh-hint");
+      if (hint) hint.textContent = "Pull to refresh";
+    });
+  }
+
   function initGenreRail(labels, onGenreChange) {
     ensureGenreRailShell();
     const rail = document.getElementById("genreRail");
@@ -327,6 +431,7 @@
 
   function init() {
     ensureGenreRailShell();
+    initPullToRefresh();
     global.matchMedia("(max-width: 899px)").addEventListener("change", () => {
       document.body.classList.toggle("scroll-mode", useScrollWall());
       if (!useScrollWall()) closeInlinePreview();

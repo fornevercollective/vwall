@@ -115,9 +115,14 @@
     if (!panel || !toggle) return;
 
     panel.classList.toggle("collapsed", collapsed);
+    panel.hidden = collapsed;
+    panel.setAttribute("aria-hidden", collapsed ? "true" : "false");
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     toggle.title = collapsed ? "Show metrics panel" : "Hide metrics panel";
-    if (inner) inner.textContent = collapsed ? "▸" : "▾";
+    if (inner) {
+      inner.textContent = collapsed ? "▸" : "▾";
+      inner.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    }
 
     try {
       localStorage.setItem("vwallMetricsCollapsed", collapsed ? "1" : "0");
