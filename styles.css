@@ -22,11 +22,19 @@ canvas {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   z-index: 20;
   border-bottom: 1px solid #222;
   color: #ccc;
   font-size: 13px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .header-left label {
@@ -68,15 +76,17 @@ canvas {
   background: #222;
   color: #fff;
   font-size: 12px;
+  max-width: 11rem;
 }
 
 .media-filters {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
-  justify-content: center;
+  align-items: center;
   flex: 1;
-  min-width: 200px;
+  min-width: 0;
+  justify-content: flex-start;
 }
 
 .media-chip {
@@ -100,8 +110,7 @@ canvas {
   opacity: 0.45;
 }
 
-#perf,
-.perf-compact {
+#perf.perf-compact {
   font-family: "SF Mono", "Consolas", monospace;
   font-size: 12px;
   padding: 3px 8px;
@@ -109,6 +118,19 @@ canvas {
   background: #1a1a1a;
   border: 1px solid #333;
   white-space: nowrap;
+  color: #ccc;
+  cursor: pointer;
+  pointer-events: auto;
+  margin: 0;
+}
+
+#perf.perf-compact:hover {
+  background: #252525;
+  border-color: #555;
+}
+
+#perf.perf-compact[aria-expanded="false"] {
+  border-color: #555;
 }
 
 #metricsPanel {
@@ -124,15 +146,49 @@ canvas {
   font-size: 11px;
   color: #aaa;
   backdrop-filter: blur(8px);
+  pointer-events: auto;
+  transform: translateX(0);
+  opacity: 1;
+  visibility: visible;
+  transition: transform 0.22s ease, opacity 0.2s ease, visibility 0.22s;
+}
+
+#metricsPanel.collapsed {
+  transform: translateX(calc(100% + 16px));
+  opacity: 0;
+  visibility: hidden;
   pointer-events: none;
 }
 
 .metrics-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #666;
   margin-bottom: 8px;
+}
+
+.metrics-collapse-btn {
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: #888;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.metrics-collapse-btn:hover {
+  color: #fff;
+}
+
+#metricsPanel.collapsed .metrics-collapse-btn {
+  transform: rotate(-90deg);
 }
 
 .metric-row {
@@ -185,6 +241,7 @@ footer {
   background: rgba(15,15,15,0.9);
   backdrop-filter: blur(6px);
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   z-index: 20;
@@ -212,7 +269,8 @@ button.active {
 }
 
 #search {
-  flex: 1;
+  flex: 1.2;
+  min-width: 120px;
   padding: 8px 12px;
   border: 1px solid #444;
   border-radius: 6px;
@@ -228,6 +286,27 @@ button.active {
 
 #search::placeholder {
   color: #666;
+}
+
+#metaSearch {
+  flex: 1;
+  min-width: 100px;
+  padding: 8px 10px;
+  border: 1px solid #3a3a44;
+  border-radius: 6px;
+  background: #14141a;
+  color: #c8b8ff;
+  font-size: 13px;
+  outline: none;
+}
+
+#metaSearch:focus {
+  border-color: #6655aa;
+}
+
+#metaSearch::placeholder {
+  color: #555;
+  font-size: 12px;
 }
 
 #searchStatus {

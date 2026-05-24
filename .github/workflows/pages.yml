@@ -26,7 +26,8 @@ jobs:
       - name: Build static site
         run: |
           mkdir -p _site
-          cp index.html app.js styles.css visualwall.html focus.html LICENSE _site/
+          cp index.html app.js styles.css visualwall.html focus.html LICENSE \
+            session.js sort.js catalog.js analyzers.js probe-pool.js metadata.js metrics.js _site/
           cp -r editor _site/
           touch _site/.nojekyll
 

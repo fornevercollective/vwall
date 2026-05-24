@@ -33,6 +33,22 @@ Up to **20,000** items via the count slider (lazy-loaded thumbnails). Very large
 
 Live **FPS**, memory, load queue, per-type counts, and **buffer estimates** (video / live / gif / audio) while tiles stream in.
 
+### Incremental session (Bridge-style)
+
+VWall **keeps** loaded thumbnails, probes, and Pixi nodes in a session cache. Raising the count **extends** the wall (only fetches new URLs). Layout / reseed / sort **reposition** without refetching. Status shows `reused` vs `new` counts.
+
+### Metadata search (footer)
+
+Filter **already probed** items:
+
+- `exif:canon` · `camera:nikon` · `codec:hevc` · `dims:1920x1080` · `encoder:lavf`
+
+Runs on ffprobe / EXIF tags indexed as items load. Future: waveform, vectorscope, watermark plugins (`analyzers.js`).
+
+### Analyzer clusters
+
+`probe-pool.js` runs **4-wide** metadata clusters (reuses cache, skips duplicate ffprobe). `analyzers.js` registers waveform / vectorscope / watermark stubs for MuStream integration.
+
 ### ffprobe / EXIF (MuStream)
 
 For full stream metadata (codec, HDR hints, bitrate, buffer size, encoder tags — same family as **mustream-desktop** `meta`):

@@ -123,6 +123,26 @@
     return s;
   }
 
+  function extractExifFromFfprobe(ms) {
+    const out = {};
+    const fp = ms?.ffprobe;
+    const tags = fp?.format?.tags;
+    if (tags) {
+      for (const k of ["make", "model", "creation_time", "encoder", "copyright", "title", "comment"]) {
+        const v = tags[k] || tags[k.toUpperCase()];
+        if (v) out[k] = v;
+      }
+    }
+    const v0 = fp?.streams?.find((s) => s.codec_type === "video");
+    if (v0?.tags) {
+      for (const k of ["camera", "lens", "location", "creation_time"]) {
+        const v = v0.tags[k];
+        if (v) out[k] = v;
+      }
+    }
+    return out;
+  }
+
   async function probeItem(item) {
     const url = item.url;
     const mt = item.mediaType;
@@ -137,11 +157,15 @@
     else if (mt === "audio") browser = await probeAudio(url);
 
     const summary = mergeSummary(browser, head, ms);
+    const exif = extractExifFromFfprobe(ms);
+    Object.assign(summary, exif);
+
     return {
       browser,
       head,
       mustream: ms,
       summary,
+      exif,
       exiftool_skipped: ms?.exiftool_skipped || null
     };
   }
@@ -163,8 +187,11 @@
     push("Audio", s.audio_codec ? String(s.audio_codec).replace(/"/g, "") : null);
     push("FPS", s.fps || null);
     push("Pixel fmt", s.pix_fmt || null);
-    push("Encoder", s.format_encoder || null);
-    push("Created", s.format_creation_time || null);
+    push("Encoder", s.format_encoder || s.encoder || null);
+    push("Created", s.format_creation_time || s.creation_time || null);
+    push("Camera", s.make && s.model ? `${s.make} ${s.model}` : s.make || s.model || s.camera || null);
+    push("Lens", s.lens || null);
+    push("GPS", s.gps || s.location || null);
 
     if (meta.mustream?.error) {
       push("ffprobe", `⚠ ${meta.mustream.error}`);

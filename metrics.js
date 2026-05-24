@@ -23,7 +23,8 @@
     queue: "mQueue",
     types: "mTypes",
     buffer: "mBuffer",
-    probe: "mProbe"
+    probe: "mProbe",
+    cache: "mCache"
   };
 
   function fmtBytes(n) {
@@ -65,6 +66,12 @@
     if (el(ids.probe)) {
       el(ids.probe).textContent = m.probePending ? `meta ${m.probePending} pending` : "meta ok";
     }
+    if (el(ids.cache)) {
+      const s = global.VWallSession?.stats;
+      el(ids.cache).textContent = s
+        ? `hit ${s.cacheHits} · reuse ${s.reusedNodes} · skip ${s.skippedProbes}`
+        : "—";
+    }
 
     setHealth(el(ids.fps), m.fps, m.memMB);
   }
@@ -101,12 +108,53 @@
     render();
   }
 
+  function setMetricsCollapsed(collapsed) {
+    const panel = document.getElementById("metricsPanel");
+    const toggle = document.getElementById("perf");
+    const inner = document.getElementById("metricsCollapse");
+    if (!panel || !toggle) return;
+
+    panel.classList.toggle("collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    toggle.title = collapsed ? "Show metrics panel" : "Hide metrics panel";
+    if (inner) inner.textContent = collapsed ? "▸" : "▾";
+
+    try {
+      localStorage.setItem("vwallMetricsCollapsed", collapsed ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function initMetricsPanelToggle() {
+    const toggle = document.getElementById("perf");
+    const inner = document.getElementById("metricsCollapse");
+    if (!toggle) return;
+
+    const stored = localStorage.getItem("vwallMetricsCollapsed");
+    const collapsed = stored === "1";
+    setMetricsCollapsed(collapsed);
+
+    toggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = toggle.getAttribute("aria-expanded") === "true";
+      setMetricsCollapsed(isOpen);
+    });
+
+    inner?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = toggle.getAttribute("aria-expanded") === "true";
+      setMetricsCollapsed(isOpen);
+    });
+  }
+
   global.VWallMetrics = {
     wallMetrics,
     resetCounts,
     render,
     tickFrame,
     tickFps,
+    setMetricsCollapsed,
     addBuffer(type, bytes) {
       if (wallMetrics.bufferBytes[type] != null && bytes) {
         wallMetrics.bufferBytes[type] += bytes;
@@ -115,4 +163,5 @@
   };
 
   setInterval(tickFps, 500);
+  initMetricsPanelToggle();
 })(window);

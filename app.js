@@ -30,7 +30,9 @@ let seed = 0;
 
 const CELL_SIZE = 90;
 const MAX_WALL_ITEMS = 20000;
-const LAZY_CONCURRENCY = 16;
+const LAZY_CONCURRENCY = 24;
+const API_CACHE_TTL_MS = 120000;
+const apiResultCache = new Map();
 
 const clusterLabels = [
   "nature","faces","objects","abstract","urban","texture","geometry",
@@ -81,8 +83,28 @@ function classifyMedia(mime, url, title) {
   return "image";
 }
 
-function mediaItem({ url, title, snippet, mime, mediaType, thumbUrl, source }) {
+function mediaItem(fields) {
+  const {
+    url,
+    title,
+    snippet,
+    mime,
+    mediaType,
+    thumbUrl,
+    source,
+    provider,
+    published,
+    indexed_on,
+    filetype,
+    license
+  } = fields;
   const mt = mediaType || classifyMedia(mime, url, title);
+  let host = "";
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    /* ignore */
+  }
   return {
     url,
     title: title || "",
@@ -90,7 +112,13 @@ function mediaItem({ url, title, snippet, mime, mediaType, thumbUrl, source }) {
     mime: mime || "",
     mediaType: mt,
     thumbUrl: thumbUrl || null,
-    source: source || ""
+    source: source || "",
+    provider: provider || "",
+    host,
+    published: published || indexed_on || "",
+    indexed_on: indexed_on || "",
+    filetype: filetype || "",
+    license: license || ""
   };
 }
 
@@ -99,11 +127,8 @@ function acceptsMediaType(mt) {
 }
 
 function sortItemsByMedia(items) {
-  const mode = document.getElementById("sortMode")?.value || "mixed";
-  if (mode !== "type") return items;
-  return [...items].sort(
-    (a, b) => (MEDIA_META[a.mediaType]?.order ?? 99) - (MEDIA_META[b.mediaType]?.order ?? 99)
-  );
+  if (window.VWallSort) return VWallSort.sortItems(items, null, MEDIA_META);
+  return items;
 }
 
 function countByMedia(items) {
@@ -211,7 +236,12 @@ async function searchOpenverseImages(query, maxItems) {
         snippet: creator ? `${creator} · Openverse` : "Openverse",
         mime,
         mediaType: mt,
-        source: "openverse"
+        source: "openverse",
+        provider: item.provider || item.source || "openverse",
+        published: item.creation_date || item.published_date || "",
+        indexed_on: item.indexed_on || "",
+        filetype: item.filetype || "",
+        license: item.license || ""
       }));
       if (results.length >= maxItems) return results;
     }
@@ -250,7 +280,11 @@ async function searchOpenverseAudio(query, maxItems) {
         snippet: item.creator ? `${item.creator} · Openverse Audio` : "Openverse Audio",
         mime: item.filetype ? `audio/${item.filetype}` : "audio/mpeg",
         mediaType: "audio",
-        source: "openverse"
+        source: "openverse",
+        provider: item.provider || "openverse",
+        indexed_on: item.indexed_on || "",
+        filetype: item.filetype || "",
+        license: item.license || ""
       }));
       if (results.length >= maxItems) return results;
     }
@@ -268,15 +302,24 @@ const SPECIAL_SEARCHES = {
   gif: (q) => `${q} animated gif`
 };
 
-async function fetchMediaResults(query, limit) {
+function cacheKeyForFetch(q, limit, excludeSize) {
+  return `${q}|${limit}|${[...activeMediaTypes].sort().join(",")}|${excludeSize}`;
+}
+
+async function fetchMediaResults(query, limit, opts = {}) {
   const q = query.trim();
   if (!q || activeMediaTypes.size === 0) return [];
 
+  const exclude = opts.exclude || new Set();
   const target = Math.min(limit, MAX_WALL_ITEMS);
-  const perSource = Math.ceil(target / Math.max(1, activeMediaTypes.size)) + 20;
-  const batches = [];
+  const ck = cacheKeyForFetch(q, target, exclude.size);
+  const cached = apiResultCache.get(ck);
+  if (cached && Date.now() - cached.t < API_CACHE_TTL_MS) {
+    return cached.items.filter((it) => !exclude.has(`${it.mediaType}:${it.url}`));
+  }
 
-  batches.push(searchWikimedia(q, perSource));
+  const perSource = Math.ceil(target / Math.max(1, activeMediaTypes.size)) + 15;
+  const batches = [searchWikimedia(q, perSource)];
 
   if (activeMediaTypes.has("image") || activeMediaTypes.has("gif") || activeMediaTypes.has("video")) {
     batches.push(searchOpenverseImages(q, perSource));
@@ -284,7 +327,6 @@ async function fetchMediaResults(query, limit) {
   if (activeMediaTypes.has("audio")) {
     batches.push(searchOpenverseAudio(q, perSource));
   }
-
   for (const type of ["gsplat", "live", "gif"]) {
     if (activeMediaTypes.has(type) && SPECIAL_SEARCHES[type]) {
       batches.push(searchWikimedia(q, Math.ceil(perSource / 2), SPECIAL_SEARCHES[type](q)));
@@ -292,7 +334,7 @@ async function fetchMediaResults(query, limit) {
   }
 
   const raw = (await Promise.all(batches)).flat();
-  const seen = new Set();
+  const seen = new Set(exclude);
   const merged = [];
 
   for (const item of raw) {
@@ -304,7 +346,9 @@ async function fetchMediaResults(query, limit) {
     if (merged.length >= target) break;
   }
 
-  return sortItemsByMedia(merged.slice(0, target));
+  const sorted = sortItemsByMedia(merged.slice(0, target));
+  apiResultCache.set(ck, { t: Date.now(), items: sorted });
+  return sorted;
 }
 
 function defaultExploreQuery() {
@@ -375,11 +419,9 @@ function openDrawer(data) {
     data._hls = hls;
   }
 
-  if (!data.probeMeta && window.VWallMeta) {
-    VWallMeta.probeItem({
-      url: data.url,
-      mediaType: mt
-    }).then((probeMeta) => {
+  if (!data.probeMeta && window.VWallProbePool) {
+    VWallProbePool.probeCached({ url: data.url, mediaType: mt }).then((r) => {
+      const probeMeta = r?.meta;
       data.probeMeta = probeMeta;
       const buf = probeMeta?.summary?.buffer_est_bytes;
       if (buf && VWallMetrics) {
@@ -427,44 +469,54 @@ function semanticEmbed(i, seed) {
 }
 
 // ==========================
-// LAZY TEXTURE LOADER
+// LAZY TEXTURE LOADER (incremental — reuses loaded thumbs)
 // ==========================
 let lazyGen = 0;
 let lazyInFlight = 0;
 let lazyQueue = [];
+const session = () => window.VWallSession;
 
-function lazyMarkLoaded(item, ok) {
+function lazyMarkLoaded(entry, ok) {
   const m = VWallMetrics?.wallMetrics;
   if (!m) return;
   if (ok) {
     m.loaded++;
-    m.loadedByType[item.mediaType] = (m.loadedByType[item.mediaType] || 0) + 1;
+    m.loadedByType[entry.item.mediaType] = (m.loadedByType[entry.item.mediaType] || 0) + 1;
+    entry.thumbState = "loaded";
   } else {
     m.failed++;
+    entry.thumbState = "failed";
   }
   m.pending = Math.max(0, m.total - m.loaded - m.failed);
   VWallMetrics.render();
   const perf = document.getElementById("perf");
-  if (perf) perf.textContent = `${m.loaded}/${m.total}`;
+  if (perf) {
+    const s = session()?.stats;
+    perf.textContent = `${m.loaded}/${m.total}${s ? ` · ${s.reusedNodes} reuse` : ""}`;
+  }
 }
 
-async function lazyProbeNode(container, item) {
-  if (!window.VWallMeta || container.probeMeta) return;
+async function lazyProbeEntry(entry) {
+  if (!entry || entry.probeMeta) {
+    session()?.bumpStats("skippedProbes");
+    return;
+  }
   const m = VWallMetrics?.wallMetrics;
   if (m) {
     m.probePending++;
     VWallMetrics.render();
   }
   try {
-    container.probeMeta = await VWallMeta.probeItem(item);
-    const buf = container.probeMeta?.summary?.buffer_est_bytes;
+    const r = await VWallProbePool.probeCached(entry.item);
+    entry.probeMeta = r?.meta || null;
+    entry.analyzers = r?.analyzers || null;
+    if (entry.node) {
+      entry.node.probeMeta = entry.probeMeta;
+    }
+    const buf = entry.probeMeta?.summary?.buffer_est_bytes;
     if (buf) {
-      const key =
-        item.mediaType === "live" ? "live"
-        : item.mediaType === "gif" ? "gif"
-        : item.mediaType === "video" ? "video"
-        : item.mediaType === "audio" ? "audio"
-        : null;
+      const mt = entry.item.mediaType;
+      const key = mt === "live" ? "live" : mt === "gif" ? "gif" : mt === "video" ? "video" : mt === "audio" ? "audio" : null;
       if (key && VWallMetrics) VWallMetrics.addBuffer(key, buf);
     }
   } catch {
@@ -477,24 +529,34 @@ async function lazyProbeNode(container, item) {
   }
 }
 
-async function lazyLoadThumb(container, item, gen) {
+async function lazyLoadThumb(entry, gen) {
+  const item = entry.item;
+  const container = entry.node;
   const mt = item.mediaType;
   const needsThumb = ["image", "gif", "video", "live"].includes(mt);
-  const thumb =
-    item.thumbUrl || (["image", "gif"].includes(mt) ? item.url : null);
+  const thumb = item.thumbUrl || (["image", "gif"].includes(mt) ? item.url : null);
 
-  if (!needsThumb || !thumb) {
-    lazyMarkLoaded(item, true);
-    lazyProbeNode(container, item);
+  if (entry.thumbState === "loaded" && container._thumbLoaded) {
+    session()?.bumpStats("cacheHits");
+    lazyMarkLoaded(entry, true);
+    if (!entry.probeMeta) lazyProbeEntry(entry);
     return;
   }
 
+  if (!needsThumb || !thumb) {
+    lazyMarkLoaded(entry, true);
+    lazyProbeEntry(entry);
+    return;
+  }
+
+  entry.thumbState = "loading";
   try {
     const tex = await PIXI.Assets.load({
       src: thumb,
+      alias: `vwall:${session().key(item)}`,
       data: { crossOrigin: "anonymous" }
     });
-    if (gen !== lazyGen || container.destroyed) return;
+    if (gen !== lazyGen || !container?.parent) return;
 
     container.removeChildren();
     const spr = new PIXI.Sprite(tex);
@@ -512,10 +574,10 @@ async function lazyLoadThumb(container, item, gen) {
     badge.y = -36;
     container.addChild(spr, badge);
     container._thumbLoaded = true;
-    lazyMarkLoaded(item, true);
-    lazyProbeNode(container, item);
+    lazyMarkLoaded(entry, true);
+    lazyProbeEntry(entry);
   } catch {
-    if (gen === lazyGen) lazyMarkLoaded(item, false);
+    if (gen === lazyGen) lazyMarkLoaded(entry, false);
   }
 }
 
@@ -529,7 +591,7 @@ function lazyPump(gen) {
       m.pending = lazyQueue.length + lazyInFlight;
       VWallMetrics.render();
     }
-    lazyLoadThumb(job.container, job.item, gen).finally(() => {
+    lazyLoadThumb(job.entry, gen).finally(() => {
       lazyInFlight--;
       if (m) m.inFlight = lazyInFlight;
       if (gen === lazyGen) lazyPump(gen);
@@ -537,30 +599,124 @@ function lazyPump(gen) {
   }
 }
 
-function lazyEnqueueAll(items, nodes, gen) {
-  lazyQueue = [];
-  lazyInFlight = 0;
-  for (let i = 0; i < items.length; i++) {
-    lazyQueue.push({ container: nodes[i], item: items[i] });
+function lazyEnqueuePending(gen, onlyNew = false) {
+  if (!onlyNew) {
+    lazyQueue = [];
+    lazyInFlight = 0;
+  }
+  const visible = new Set(session().displayOrder);
+  for (const key of session().displayOrder) {
+    const e = session().get(key);
+    if (!e?.node) continue;
+    if (e.thumbState === "loaded" || e.thumbState === "loading") continue;
+    if (onlyNew && e.thumbState !== "idle" && e.thumbState !== "failed") continue;
+    lazyQueue.push({ entry: e });
   }
   lazyPump(gen);
 }
 
-// ==========================
-// BUILD UNIVERSE
-// ==========================
-async function buildUniverse(query) {
-  const gen = ++searchGen;
-  world.removeChildren();
+function layoutPosition(i, n) {
+  if (gridMode) {
+    const cols = Math.ceil(Math.sqrt(n * 1.6));
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const offsetX = row % 2 === 0 ? 0 : CELL_SIZE * 0.5;
+    return {
+      bx: (col - cols / 2) * CELL_SIZE + offsetX,
+      by: (row - cols / 2) * CELL_SIZE * 0.9
+    };
+  }
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const y = 1 - (i / Math.max(n - 1, 1)) * 2;
+  const radiusAtY = Math.sqrt(1 - y * y);
+  const theta = goldenAngle * i;
+  const sphereRadius = 800;
+  return {
+    bx: Math.cos(theta) * radiusAtY * sphereRadius,
+    by: y * sphereRadius
+  };
+}
+
+function mountDisplayEntries(entries) {
+  const visible = new Set(entries.map((e) => e.key));
   nodes = [];
 
+  entries.forEach((e, i) => {
+    const emb = semanticEmbed(i, seed);
+    const { bx, by } = layoutPosition(i, entries.length);
+
+    if (e.node && e.node._thumbLoaded) {
+      session().bumpStats("reusedNodes");
+      e.node.baseX = bx;
+      e.node.baseY = by;
+      e.node.x = bx;
+      e.node.y = by;
+      e.node.cluster = emb.cluster;
+      e.node.clusterLabel = emb.clusterLabel;
+      if (!e.node.parent) world.addChild(e.node);
+      nodes.push(e.node);
+      return;
+    }
+
+    if (e.node) {
+      e.node.destroy({ children: true });
+    }
+    e.node = createWallNode(e.item, bx, by, emb);
+    e.node.probeMeta = e.probeMeta;
+    world.addChild(e.node);
+    session().bumpStats("newNodes");
+    nodes.push(e.node);
+  });
+
+  for (const [, e] of session().byKey) {
+    if (e.node && !visible.has(e.key) && e.node.parent) {
+      world.removeChild(e.node);
+    }
+  }
+}
+
+function applyMetaFilter(entries) {
+  const metaQ = document.getElementById("metaSearch")?.value?.trim();
+  if (!metaQ || !window.VWallCatalog) return entries;
+  const items = entries.map((e) => e.item);
+  const filtered = VWallCatalog.filterItems(items, metaQ);
+  const keep = new Set(filtered.map((it) => session().key(it)));
+  return entries.filter((e) => keep.has(e.key));
+}
+
+function sortDisplayEntries(entries) {
+  if (window.VWallSort) return VWallSort.sortEntries(entries, null, MEDIA_META);
+  return entries;
+}
+
+// ==========================
+// SYNC UNIVERSE (incremental)
+// ==========================
+async function syncUniverse(query, opts = {}) {
+  const gen = ++searchGen;
   const count = parseInt(countSlider.value, 10) || 1000;
+  const q = (query && query.trim()) || defaultExploreQuery();
+  const layoutOnly = opts.layoutOnly === true;
+  const extendOnly = opts.extendOnly === true;
+  const filterOnly = opts.filterOnly === true;
+  const queryChanged = q !== session().lastQuery && !filterOnly;
+
+  session().stats = { cacheHits: 0, reusedNodes: 0, newNodes: 0, skippedProbes: 0 };
+
+  if (layoutOnly) {
+    let entries = applyMetaFilter(
+      session().getDisplayEntries(session().displayOrder.length)
+    );
+    entries = sortDisplayEntries(entries);
+    session().setDisplayKeys(entries.map((e) => e.key));
+    mountDisplayEntries(entries);
+    return;
+  }
+
   lazyGen++;
   const lazyGenLocal = lazyGen;
-  const q = (query && query.trim()) || defaultExploreQuery();
-
   searchBtn.disabled = true;
-  setSearchStatus(`Searching “${q}”…`);
+  setSearchStatus(queryChanged ? `Searching “${q}”…` : `Extending “${q}”…`);
 
   if (activeMediaTypes.size === 0) {
     setSearchStatus("Enable at least one media type");
@@ -568,63 +724,83 @@ async function buildUniverse(query) {
     return;
   }
 
-  let items;
-  try {
-    items = await fetchMediaResults(q, count);
-  } catch (e) {
-    console.error("Search failed:", e);
-    items = [];
+  session().lastQuery = q;
+  let displayKeys = filterOnly ? [] : [...session().displayOrder];
+
+  if (queryChanged) {
+    displayKeys = [];
+  }
+
+  if (filterOnly) {
+    displayKeys = [...session().byKey.entries()]
+      .filter(([, e]) => acceptsMediaType(e.item.mediaType) && e.lastQuery === q)
+      .map(([k]) => k)
+      .slice(0, count);
+  }
+
+  const visibleCount = displayKeys.length;
+  const need = filterOnly ? 0 : count - visibleCount;
+
+  if (need > 0 && !filterOnly) {
+    try {
+      const fetched = await fetchMediaResults(q, need, { exclude: session().keys() });
+      if (gen !== searchGen) return;
+      for (const item of fetched) {
+        const key = session().key(item);
+        session().touchEntry(key, item);
+        if (!displayKeys.includes(key)) displayKeys.push(key);
+      }
+    } catch (e) {
+      console.error("Search failed:", e);
+    }
+  } else if (need < 0) {
+    displayKeys = displayKeys.slice(0, count);
   }
 
   if (gen !== searchGen) return;
 
-  if (!items.length) {
-    setSearchStatus(`No results for “${q}” (${[...activeMediaTypes].join(", ")})`);
+  displayKeys = displayKeys.filter((k) => {
+    const e = session().get(k);
+    return e && acceptsMediaType(e.item.mediaType);
+  });
+
+  session().setDisplayKeys(displayKeys.slice(0, count));
+  let entries = session().getDisplayEntries(count);
+  entries = sortDisplayEntries(entries);
+  session().setDisplayKeys(entries.map((e) => e.key));
+  entries = applyMetaFilter(entries);
+
+  if (!entries.length) {
+    setSearchStatus(`No results for “${q}”`);
     searchBtn.disabled = false;
     return;
   }
 
-  const tallies = countByMedia(items);
-  const tallyStr = MEDIA_TYPES.filter(t => tallies[t]).map(t => `${t}:${tallies[t]}`).join(" ");
-  setSearchStatus(`${items.length} · ${tallyStr}`);
+  const tallies = countByMedia(entries.map((e) => e.item));
+  const s = session().stats;
+  const tallyStr = MEDIA_TYPES.filter((t) => tallies[t]).map((t) => `${t}:${tallies[t]}`).join(" ");
+  setSearchStatus(`${entries.length} · ${tallyStr} · +${s.newNodes} new · ${s.reusedNodes} reused`);
 
-  searchBtn.disabled = false;
-
-  const talliesForMetrics = countByMedia(items);
-  if (window.VWallMetrics) VWallMetrics.resetCounts(items.length, talliesForMetrics);
-
-  const builtNodes = [];
-  items.forEach((item, i) => {
-    const emb = semanticEmbed(i, seed);
-    let bx, by;
-
-    if (gridMode) {
-      // Checkerboard — perfect rows/columns with alternating offset
-      const cols = Math.ceil(Math.sqrt(items.length * 1.6));
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const offsetX = (row % 2 === 0) ? 0 : CELL_SIZE * 0.5;
-      bx = (col - cols / 2) * CELL_SIZE + offsetX;
-      by = (row - cols / 2) * CELL_SIZE * 0.9;
-    } else {
-      // Sphere — golden spiral projection (Fibonacci sphere)
-      const n = items.length;
-      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-      const y = 1 - (i / Math.max(n - 1, 1)) * 2;
-      const radiusAtY = Math.sqrt(1 - y * y);
-      const theta = goldenAngle * i;
-      const sphereRadius = 800;
-      bx = Math.cos(theta) * radiusAtY * sphereRadius;
-      by = y * sphereRadius;
+  if (window.VWallMetrics) {
+    const loaded = entries.filter((e) => e.thumbState === "loaded").length;
+    VWallMetrics.resetCounts(entries.length, tallies);
+    const wm = VWallMetrics.wallMetrics;
+    wm.loaded = loaded;
+    wm.pending = Math.max(0, entries.length - loaded - wm.failed);
+    for (const e of entries) {
+      if (e.thumbState === "loaded") {
+        wm.loadedByType[e.item.mediaType] = (wm.loadedByType[e.item.mediaType] || 0) + 1;
+      }
     }
+  }
 
-    const node = createWallNode(item, bx, by, emb);
-    world.addChild(node);
-    nodes.push(node);
-    builtNodes.push(node);
-  });
+  mountDisplayEntries(entries);
+  searchBtn.disabled = false;
+  lazyEnqueuePending(lazyGenLocal, extendOnly || need > 0);
+}
 
-  lazyEnqueueAll(items, builtNodes, lazyGenLocal);
+async function buildUniverse(query, opts) {
+  return syncUniverse(query, opts);
 }
 
 function hexToPixi(hex) {
@@ -693,7 +869,8 @@ window.runSearch = async () => {
     return;
   }
   seed++;
-  await buildUniverse(q);
+  session().displayOrder = [];
+  await syncUniverse(q);
   input.blur();
 };
 
@@ -727,13 +904,13 @@ window.toggleLayout = async () => {
   document.getElementById("layoutBtn").innerText = gridMode ? "Checkerboard" : "Sphere";
   document.getElementById("layoutBtn").classList.toggle("active", gridMode);
   const q = document.getElementById("search").value.trim() || null;
-  await buildUniverse(q);
+  await syncUniverse(q, { layoutOnly: true });
 };
 
 window.reseed = async () => {
   seed = Math.floor(Math.random() * 1000);
   const q = document.getElementById("search").value.trim() || null;
-  await buildUniverse(q);
+  await syncUniverse(q, { layoutOnly: true });
 };
 
 // ==========================
@@ -825,16 +1002,25 @@ function initMediaFilters() {
       }
       saveMediaFilters();
       const q = document.getElementById("search").value.trim() || null;
-      await buildUniverse(q);
+      await syncUniverse(q, { filterOnly: true });
     });
     bar.appendChild(chip);
   }
 
   document.getElementById("sortMode")?.addEventListener("change", async () => {
     const q = document.getElementById("search").value.trim() || null;
-    await buildUniverse(q);
+    await syncUniverse(q, { layoutOnly: true });
   });
 }
+
+let metaTimeout;
+document.getElementById("metaSearch")?.addEventListener("input", () => {
+  clearTimeout(metaTimeout);
+  metaTimeout = setTimeout(async () => {
+    const q = document.getElementById("search").value.trim() || null;
+    await syncUniverse(q, { filterOnly: true });
+  }, 350);
+});
 
 // ==========================
 // INIT
@@ -851,15 +1037,17 @@ const countSlider = document.getElementById("countSlider");
 const countVal = document.getElementById("countVal");
 let sliderTimeout;
 
+let lastSliderCount = parseInt(countSlider.value, 10) || 1000;
+
 countSlider.addEventListener("input", () => {
-  const v = parseInt(countSlider.value);
+  const v = parseInt(countSlider.value, 10);
   countVal.innerText = v;
   clearTimeout(sliderTimeout);
-  // debounce: wait 500ms before rebuilding
   sliderTimeout = setTimeout(async () => {
-    seed = Math.floor(Math.random() * 1000);
     const q = document.getElementById("search").value.trim() || null;
-    await buildUniverse(q);
-  }, 500);
+    const extendOnly = v > lastSliderCount;
+    lastSliderCount = v;
+    await syncUniverse(q, { extendOnly });
+  }, 400);
 });
 

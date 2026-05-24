@@ -15,18 +15,26 @@
     <label class="sort-label">Sort
       <select id="sortMode" title="Layout order on the wall">
         <option value="mixed">Mixed</option>
-        <option value="type">By media type</option>
+        <option value="type">Media type</option>
+        <option value="resolution">Resolution ↓</option>
+        <option value="resolution-asc">Resolution ↑</option>
+        <option value="date">Date published ↓</option>
+        <option value="date-asc">Date published ↑</option>
+        <option value="exif">EXIF / camera</option>
+        <option value="format">Format / codec</option>
+        <option value="source">Source / provider</option>
+        <option value="cdn">CDN / region</option>
       </select>
     </label>
+    <div id="mediaFilters" class="media-filters" title="Show only selected media types"></div>
   </div>
-  <div id="mediaFilters" class="media-filters" title="Show only selected media types"></div>
   <div class="header-right">
-    <span id="perf" class="perf-compact" title="Summary — see metrics panel">—</span>
+    <button type="button" id="perf" class="perf-compact" aria-expanded="true" aria-controls="metricsPanel" title="Click to show or hide metrics panel">—</button>
   </div>
 </div>
 
 <aside id="metricsPanel" aria-label="Performance metrics">
-  <div class="metrics-title">Metrics</div>
+  <div class="metrics-title">Metrics <button type="button" id="metricsCollapse" class="metrics-collapse-btn" aria-label="Collapse metrics panel">▾</button></div>
   <div class="metric-row"><span>FPS</span><strong id="mFps">—</strong></div>
   <div class="metric-row"><span>Memory</span><strong id="mMem">—</strong></div>
   <div class="metric-row"><span>Loaded</span><strong id="mLoad">—</strong></div>
@@ -34,11 +42,13 @@
   <div class="metric-row"><span>Types</span><strong id="mTypes" class="metric-wide">—</strong></div>
   <div class="metric-row"><span>Buffer est.</span><strong id="mBuffer" class="metric-wide">—</strong></div>
   <div class="metric-row"><span>Probe</span><strong id="mProbe" class="metric-wide">—</strong></div>
-  <p class="metrics-hint">Run <code>mustream probe-serve</code> for ffprobe / EXIF-style fields in the inspector.</p>
+  <div class="metric-row"><span>Cache</span><strong id="mCache" class="metric-wide">—</strong></div>
+  <p class="metrics-hint">Run <code>mustream probe-serve</code> for ffprobe / EXIF. Meta filter searches probed tags.</p>
 </aside>
 
 <footer>
-  <input id="search" type="text" placeholder="Search images (no API key)..." />
+  <input id="search" type="text" placeholder="Search media…" />
+  <input id="metaSearch" type="text" placeholder="exif:canon codec:h264 dims:1920x1080" title="Filter loaded items by metadata (Bridge-style)" />
   <button id="searchBtn" onclick="runSearch()">Go</button>
   <span id="searchStatus"></span>
   <button id="layoutBtn" onclick="toggleLayout()">Sphere</button>
@@ -52,6 +62,11 @@
 <video id="video" controls style="display:none; width:100%; height:100%;"></video>
 <canvas id="c"></canvas>
 
+<script src="session.js"></script>
+<script src="sort.js"></script>
+<script src="catalog.js"></script>
+<script src="analyzers.js"></script>
+<script src="probe-pool.js"></script>
 <script src="metadata.js"></script>
 <script src="metrics.js"></script>
 <script src="app.js"></script>
