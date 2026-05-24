@@ -1266,7 +1266,9 @@ if (window.VWallScroll) {
     }
     await syncUniverse(q, { extendOnly: true });
   };
-  globalThis.matchMedia("(max-width: 899px)").addEventListener("change", () => {
+  globalThis.matchMedia(
+    window.VWallScroll?.SCROLL_WALL_MQ ?? "(max-width: 899px), (max-height: 620px)"
+  ).addEventListener("change", () => {
     let entries = session().getDisplayEntries(getWallCount());
     entries = sortDisplayEntries(entries);
     entries = applyMetaFilter(entries);

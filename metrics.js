@@ -115,7 +115,6 @@
     if (!panel || !toggle) return;
 
     panel.classList.toggle("collapsed", collapsed);
-    panel.hidden = collapsed;
     panel.setAttribute("aria-hidden", collapsed ? "true" : "false");
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     toggle.title = collapsed ? "Show metrics panel" : "Hide metrics panel";

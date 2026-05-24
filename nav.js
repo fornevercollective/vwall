@@ -5,7 +5,9 @@
   const SHEET_KEY = "vwallSheetOpen";
 
   function isMobile() {
-    return global.matchMedia("(max-width: 899px)").matches;
+    return global.VWallScroll
+      ? global.VWallScroll.useScrollWall()
+      : global.matchMedia("(max-width: 899px), (max-height: 620px)").matches;
   }
 
   function panel() {
@@ -64,7 +66,9 @@
       if (e.key === "Escape") closeSheet();
     });
 
-    global.matchMedia("(max-width: 899px)").addEventListener("change", (mq) => {
+    global.matchMedia(
+      global.VWallScroll?.SCROLL_WALL_MQ ?? "(max-width: 899px), (max-height: 620px)"
+    ).addEventListener("change", (mq) => {
       if (!mq.matches) setSheetOpen(false);
     });
 

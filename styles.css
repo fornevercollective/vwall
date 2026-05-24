@@ -80,11 +80,16 @@ body.scroll-mode .genre-rail-wrap {
   );
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: auto;
   z-index: 5;
   background: #0b0b0b;
   --pull-distance: 0px;
-  transition: transform 0.16s ease;
+  transition: transform 0.2s cubic-bezier(0.25, 0.82, 0.25, 1);
+}
+
+.scroll-viewport.pull-refresh-dragging {
+  transition: none;
 }
 
 .scroll-viewport.pull-refresh-active {
@@ -1074,8 +1079,8 @@ button.active {
   background: none;
 }
 
-/* ——— Mobile (phone / narrow) ——— */
-@media (max-width: 899px) {
+/* ——— Mobile: narrow widths, OR short height (landscape phone / squat window / small tablet rotated) ——— */
+@media (max-width: 899px), (max-height: 620px) {
   :root {
     --header-h: calc(56px + var(--safe-top));
     --footer-h: calc(100px + var(--safe-bottom));
@@ -1309,13 +1314,33 @@ button.active {
     left: 8px;
     right: 8px;
     width: auto;
-    max-height: 40vh;
+    max-height: min(165px, 28vh);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
 
   #metricsPanel.collapsed {
-    transform: translateY(calc(100% + 24px));
+    transform: translateY(calc(100% + 28px));
+  }
+
+  /* Don't park metrics over content in shallow landscape — dock under header on the right. */
+  @media (orientation: landscape) {
+    #metricsPanel {
+      top: calc(var(--header-h, 76px) + 6px);
+      bottom: auto;
+      left: auto;
+      right: max(8px, var(--safe-right));
+      width: min(200px, 38vw);
+      max-height: min(
+        calc(100dvh - var(--header-h) - var(--genre-rail-h) - var(--safe-top) - 12px),
+        55vh,
+        220px
+      );
+    }
+
+    #metricsPanel.collapsed {
+      transform: translateX(calc(100% + 20px));
+    }
   }
 
   :root {
@@ -1356,7 +1381,7 @@ button.active {
   }
 }
 
-@media (min-width: 900px) {
+@media (min-width: 900px) and (min-height: 621px) {
   :root {
     --header-h: 118px;
     --footer-h: 60px;

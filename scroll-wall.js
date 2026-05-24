@@ -50,8 +50,11 @@
     updateGenreRailSummary();
   }
 
+  /** Mobile scroll-wall when narrow OR vertically short (landscape phones / squat windows). */
+  const SCROLL_WALL_MQ =
+    "(max-width: 899px), (max-height: 620px)";
   function useScrollWall() {
-    return global.matchMedia("(max-width: 899px)").matches;
+    return global.matchMedia(SCROLL_WALL_MQ).matches;
   }
 
   function escapeHtml(s) {
@@ -318,6 +321,17 @@
     viewport.prepend(hint);
   }
 
+  function resetPullRefreshVisual(vp, hintText) {
+    const viewport = vp || document.getElementById("scrollViewport");
+    if (!viewport) return;
+    viewport.classList.remove("pull-refresh-dragging");
+    viewport.classList.remove("pull-refresh-active", "pull-refresh-armed");
+    viewport.style.removeProperty("--pull-distance");
+    const hint = viewport.querySelector(".pull-refresh-hint");
+    if (hint && hintText != null) hint.textContent = hintText;
+    else if (hint) hint.textContent = pullRefreshBusy ? "Refreshing…" : "Pull to refresh";
+  }
+
   function refreshCurrentSearch() {
     if (pullRefreshBusy) return;
     pullRefreshBusy = true;
@@ -326,11 +340,7 @@
     if (q && input) input.value = q;
     const done = () => {
       pullRefreshBusy = false;
-      const viewport = document.getElementById("scrollViewport");
-      viewport?.classList.remove("pull-refresh-active", "pull-refresh-armed");
-      viewport?.style.removeProperty("--pull-distance");
-      const hint = viewport?.querySelector(".pull-refresh-hint");
-      if (hint) hint.textContent = "Pull to refresh";
+      resetPullRefreshVisual(null, "Pull to refresh");
     };
     if (q && typeof global.runSearch === "function") {
       Promise.resolve(global.runSearch()).finally(done);
@@ -362,10 +372,20 @@
     viewport.addEventListener("touchmove", (e) => {
       if (!active || pullRefreshBusy) return;
       const dy = e.touches[0].clientY - startY;
-      if (dy <= 0) return;
+      if (dy <= 0) {
+        if (
+          viewport.classList.contains("pull-refresh-active") ||
+          viewport.style.getPropertyValue("--pull-distance")
+        ) {
+          armed = false;
+          distance = 0;
+          resetPullRefreshVisual(viewport);
+        }
+        return;
+      }
       distance = Math.min(120, dy * 0.65);
       armed = distance >= 88;
-      viewport.classList.add("pull-refresh-active");
+      viewport.classList.add("pull-refresh-dragging", "pull-refresh-active");
       viewport.classList.toggle("pull-refresh-armed", armed);
       viewport.style.setProperty("--pull-distance", `${distance}px`);
       const hint = viewport.querySelector(".pull-refresh-hint");
@@ -373,18 +393,30 @@
       e.preventDefault();
     }, { passive: false });
 
-    viewport.addEventListener("touchend", () => {
-      if (!active) return;
+    const endGesture = ({ mayRefresh }) => {
+      viewport.classList.remove("pull-refresh-dragging");
+      const shouldRefresh = mayRefresh && armed;
+      armed = false;
       active = false;
-      if (armed) {
+      distance = 0;
+
+      if (shouldRefresh && !pullRefreshBusy) {
+        resetPullRefreshVisual(viewport, "Refreshing…");
         refreshCurrentSearch();
         return;
       }
-      viewport.classList.remove("pull-refresh-active", "pull-refresh-armed");
-      viewport.style.removeProperty("--pull-distance");
-      const hint = viewport.querySelector(".pull-refresh-hint");
-      if (hint) hint.textContent = "Pull to refresh";
-    });
+      resetPullRefreshVisual(viewport);
+    };
+
+    viewport.addEventListener("touchend", () => {
+      if (!active) return;
+      endGesture({ mayRefresh: true });
+    }, { passive: true });
+
+    viewport.addEventListener("touchcancel", () => {
+      if (!active) return;
+      endGesture({ mayRefresh: false });
+    }, { passive: true });
   }
 
   function initGenreRail(labels, onGenreChange) {
@@ -432,7 +464,7 @@
   function init() {
     ensureGenreRailShell();
     initPullToRefresh();
-    global.matchMedia("(max-width: 899px)").addEventListener("change", () => {
+    global.matchMedia(SCROLL_WALL_MQ).addEventListener("change", () => {
       document.body.classList.toggle("scroll-mode", useScrollWall());
       if (!useScrollWall()) closeInlinePreview();
     });
@@ -440,6 +472,7 @@
   }
 
   global.VWallScroll = {
+    SCROLL_WALL_MQ,
     useScrollWall,
     mount,
     init,
