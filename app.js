@@ -22,12 +22,43 @@ world.position.set(innerWidth / 2, innerHeight / 2);
 let nodes = [];
 let blurEnabled = false;
 let blendEnabled = false;
-let gridMode = false; // false = sphere, true = checkerboard
+const LAYOUT_MODE_KEY = "vwallLayoutGrid";
+
+function loadGridModePreference() {
+  try {
+    const stored = localStorage.getItem(LAYOUT_MODE_KEY);
+    if (stored === "0") return false;
+    if (stored === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return true; // default: checkerboard
+}
+
+function saveGridModePreference() {
+  try {
+    localStorage.setItem(LAYOUT_MODE_KEY, gridMode ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+let gridMode = loadGridModePreference(); // false = sphere, true = checkerboard
 
 window.VWallLayout = {
   isGridMode: () => gridMode,
   isSphereMode: () => !gridMode
 };
+
+function syncLayoutBtn() {
+  const btn = document.getElementById("layoutBtn");
+  if (!btn) return;
+  btn.innerText = gridMode ? "Checkerboard" : "Sphere";
+  btn.classList.toggle("active", gridMode);
+  btn.title = gridMode
+    ? "Checkerboard layout (2D grid) — click for sphere"
+    : "Sphere layout — click for checkerboard";
+}
 let dragging = false;
 let last = { x: 0, y: 0 };
 let selected = null;
@@ -1113,8 +1144,8 @@ window.toggleBlend = () => {
 
 window.toggleLayout = async () => {
   gridMode = !gridMode;
-  document.getElementById("layoutBtn").innerText = gridMode ? "Checkerboard" : "Sphere";
-  document.getElementById("layoutBtn").classList.toggle("active", gridMode);
+  saveGridModePreference();
+  syncLayoutBtn();
   const q = document.getElementById("search").value.trim() || null;
   await syncUniverse(q, { layoutOnly: true });
 };
@@ -1256,6 +1287,7 @@ document.getElementById("metaSearch")?.addEventListener("input", () => {
 document.getElementById("search").placeholder =
   "https://site.com + query · or keywords…";
 initMediaFilters();
+syncLayoutBtn();
 
 if (window.VWallScroll) {
   VWallScroll.initGenreRail(clusterLabels, remountScrollWall);
