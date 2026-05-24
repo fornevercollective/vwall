@@ -21,11 +21,6 @@
       <button type="button" id="sheetClose" class="icon-btn" aria-label="Close controls">✕</button>
     </div>
 
-    <section class="panel-section panel-meta mobile-only">
-      <h3 class="panel-heading">Metadata filter</h3>
-      <input id="metaSearch" type="search" placeholder="exif:canon codec:h264…" title="Filter loaded items by metadata" />
-    </section>
-
     <section class="panel-section">
       <h3 class="panel-heading mobile-only">Count</h3>
       <div class="count-block">
@@ -115,8 +110,13 @@
 <div id="inlinePreview" class="inline-preview" aria-hidden="true"></div>
 
 <footer class="bottom-bar">
-  <input id="search" type="search" inputmode="search" autocomplete="off" placeholder="https://site.com + query · or keywords…" aria-label="Search" title="Site search: https://example.com + your terms. Also: site:example.com terms" />
-  <button type="button" id="searchBtn" class="btn-primary touch-target">Go</button>
+  <div class="search-footer-row search-footer-primary">
+    <input id="search" type="search" inputmode="search" autocomplete="off" placeholder="https://site.com + query · or keywords…" aria-label="Search media" title="Site search: https://example.com + your terms. Also: site:example.com terms" />
+    <button type="button" id="searchBtn" class="btn-primary touch-target">Go</button>
+  </div>
+  <div class="search-footer-row search-footer-meta">
+    <input id="metaSearch" type="search" placeholder="exif:canon codec:h264…" aria-label="Filter by metadata" title="Filter loaded items by metadata (exif:, codec:, camera:, dims:)" />
+  </div>
   <span id="searchStatus" class="search-status"></span>
 </footer>
 
