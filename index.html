@@ -16,7 +16,10 @@
     <button type="button" id="menuBtn" class="icon-btn mobile-only" aria-expanded="false" aria-controls="controlPanel">Controls</button>
     <span class="brand mobile-only">VWall</span>
     <div class="header-right">
-      <button type="button" id="perf" class="perf-compact touch-target" aria-expanded="true" aria-controls="metricsPanel" title="Metrics">—</button>
+      <button type="button" id="perf" class="perf-compact touch-target perf-toggle" aria-expanded="false" aria-controls="metricsPanel" title="Show or hide metrics">
+        <span class="perf-mobile-label mobile-only">Stats</span>
+        <span class="perf-desk-text desk-only" aria-hidden="true">—</span>
+      </button>
     </div>
   </header>
 
@@ -105,9 +108,14 @@
 </div>
 
 <div id="sheetBackdrop" class="sheet-backdrop mobile-only" aria-hidden="true"></div>
+<div id="metricsBackdrop" class="metrics-backdrop mobile-only" aria-hidden="true"></div>
 
-<aside id="metricsPanel" aria-label="Performance metrics">
-  <div class="metrics-title">Metrics <button type="button" id="metricsCollapse" class="metrics-collapse-btn" aria-label="Collapse metrics">▾</button></div>
+<aside id="metricsPanel" class="collapsed" aria-label="Performance metrics" aria-hidden="true">
+  <div class="metrics-title">
+    <span class="metrics-title-text">Metrics</span>
+    <button type="button" id="metricsCloseMobile" class="metrics-close-mobile mobile-only">Close</button>
+    <button type="button" id="metricsCollapse" class="metrics-collapse-btn" aria-label="Hide metrics panel">▾</button>
+  </div>
   <div class="metric-row"><span>FPS</span><strong id="mFps">—</strong></div>
   <div class="metric-row"><span>Memory</span><strong id="mMem">—</strong></div>
   <div class="metric-row"><span>Loaded</span><strong id="mLoad">—</strong></div>

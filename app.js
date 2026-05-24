@@ -626,10 +626,12 @@ function lazyMarkLoaded(entry, ok) {
   }
   m.pending = Math.max(0, m.total - m.loaded - m.failed);
   VWallMetrics.render();
-  const perf = document.getElementById("perf");
-  if (perf) {
+  const deskPerf = document.querySelector(".perf-desk-text");
+  if (deskPerf && !window.matchMedia("(max-width: 899px), (max-height: 620px)").matches) {
     const s = session()?.stats;
-    perf.textContent = `${m.loaded}/${m.total}${s ? ` · ${s.reusedNodes} reuse` : ""}`;
+    deskPerf.textContent = `${m.loaded}/${m.total}${s ? ` · ${s.reusedNodes} reuse` : ""}`;
+    const perfBtn = document.getElementById("perf");
+    if (perfBtn) perfBtn.title = `Metrics · ${m.loaded}/${m.total}`;
   }
 }
 

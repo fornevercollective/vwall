@@ -500,7 +500,8 @@ body.sheet-open .top-chrome {
 }
 
 .sheet-header,
-.sheet-backdrop {
+.sheet-backdrop,
+.metrics-backdrop {
   display: none;
 }
 
@@ -678,6 +679,19 @@ body.sheet-open .top-chrome {
   margin: 0;
 }
 
+.perf-mobile-label {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+#perf.perf-open {
+  border-color: #6a8ac4;
+  background: #2a3548;
+  color: #fff;
+}
+
 #perf.perf-compact:hover {
   background: #252525;
   border-color: #555;
@@ -722,23 +736,31 @@ body.perf-tier-critical .view-tools #blendBtn {
   transition: transform 0.22s ease, opacity 0.2s ease, visibility 0.22s;
 }
 
-#metricsPanel.collapsed {
-  transform: translateX(calc(100% + 16px));
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+#metricsPanel.collapsed,
+#metricsPanel[hidden] {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
 }
 
 .metrics-title {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: #666;
   margin-bottom: 8px;
+}
+
+.metrics-title-text {
+  flex: 1;
+}
+
+.metrics-close-mobile {
+  display: none;
 }
 
 .metrics-collapse-btn {
@@ -1177,6 +1199,50 @@ button.active {
   #header.top-bar {
     align-items: center;
     flex: 1;
+    min-width: 0;
+  }
+
+  #header .header-right {
+    position: fixed;
+    top: calc(6px + var(--safe-top));
+    right: calc(8px + var(--safe-right));
+    z-index: 60;
+    margin: 0;
+    flex-shrink: 0;
+    pointer-events: auto;
+  }
+
+  #perf.perf-compact {
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+    padding: 0 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(22, 22, 28, 0.96);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+  }
+
+  #perf.perf-compact.perf-open {
+    border-color: #7a9acc;
+    background: #3a4a62;
+  }
+
+  .metrics-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 34;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .metrics-backdrop.open {
+    display: block;
+  }
+
+  body.metrics-open .scroll-viewport,
+  body.metrics-open #c {
+    pointer-events: none;
   }
 
   .top-chrome .control-panel {
@@ -1374,44 +1440,65 @@ button.active {
   }
 
   #metricsPanel {
+    z-index: 55;
     top: auto;
     bottom: calc(var(--footer-h) + 8px);
     left: 8px;
     right: 8px;
     width: auto;
-    max-height: min(165px, 28vh);
+    max-height: min(42vh, 280px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
   }
 
-  #metricsPanel.collapsed {
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-    transform: translateY(calc(100% + 28px));
+  #metricsPanel:not(.collapsed):not([hidden]) {
+    display: block;
   }
 
-  /* Don't park metrics over content in shallow landscape — dock under header on the right. */
+  .metrics-close-mobile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--touch-min);
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid #555;
+    background: #2e2e36;
+    color: #f0f0f4;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-transform: none;
+    letter-spacing: normal;
+    cursor: pointer;
+  }
+
+  #metricsPanel .metrics-title {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: -10px -12px 8px;
+    padding: 10px 12px;
+    background: rgba(14, 14, 16, 0.98);
+    border-bottom: 1px solid #2a2a32;
+  }
+
+  #metricsPanel .metrics-collapse-btn {
+    display: none;
+  }
+
+  /* Landscape: sheet below header, clear of fixed Stats button */
   @media (orientation: landscape) {
     #metricsPanel {
-      top: calc(var(--header-h, 76px) + 6px);
+      top: calc(var(--header-h, 56px) + 8px);
       bottom: auto;
-      left: auto;
-      right: max(8px, var(--safe-right));
-      width: min(200px, 38vw);
-      max-height: min(
-        calc(100vh - var(--header-h) - var(--genre-rail-h) - var(--safe-top) - 12px),
-        55vh,
-        220px
-      );
+      left: 8px;
+      right: calc(56px + var(--safe-right));
+      width: auto;
+      max-height: min(50vh, 240px);
     }
 
-    #metricsPanel.collapsed {
-      opacity: 0;
-      visibility: hidden;
-      pointer-events: none;
-      transform: translateX(calc(100% + 20px));
-    }
   }
 
   :root {
@@ -1456,6 +1543,16 @@ button.active {
   :root {
     --header-h: 118px;
     --footer-h: 60px;
+  }
+
+  .metrics-close-mobile {
+    display: none !important;
+  }
+
+  #metricsPanel .metrics-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .top-chrome {

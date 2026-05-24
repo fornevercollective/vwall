@@ -108,23 +108,49 @@
     render();
   }
 
+  function isMobileMetrics() {
+    return global.matchMedia("(max-width: 899px), (max-height: 620px)").matches;
+  }
+
+  function isMetricsCollapsed() {
+    const panel = document.getElementById("metricsPanel");
+    return panel?.classList.contains("collapsed") === true;
+  }
+
   function setMetricsCollapsed(collapsed) {
     const panel = document.getElementById("metricsPanel");
     const toggle = document.getElementById("perf");
     const inner = document.getElementById("metricsCollapse");
+    const mobileClose = document.getElementById("metricsCloseMobile");
+    const backdrop = document.getElementById("metricsBackdrop");
+    const mobileLabel = document.querySelector(".perf-mobile-label");
     if (!panel) return;
 
     panel.classList.toggle("collapsed", collapsed);
-    panel.hidden = collapsed;
+    panel.toggleAttribute("hidden", collapsed);
     panel.setAttribute("aria-hidden", collapsed ? "true" : "false");
     if (toggle) {
       toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
       toggle.title = collapsed ? "Show metrics panel" : "Hide metrics panel";
+      toggle.classList.toggle("perf-open", !collapsed);
+    }
+    if (mobileLabel && isMobileMetrics()) {
+      mobileLabel.textContent = collapsed ? "Stats" : "Close";
+    }
+    if (mobileClose && isMobileMetrics()) {
+      mobileClose.textContent = "Close";
     }
     if (inner) {
       inner.textContent = collapsed ? "▸" : "▾";
+      inner.setAttribute("aria-label", collapsed ? "Show metrics panel" : "Hide metrics panel");
       inner.setAttribute("aria-expanded", collapsed ? "false" : "true");
     }
+    if (backdrop && isMobileMetrics()) {
+      backdrop.classList.toggle("open", !collapsed);
+      backdrop.toggleAttribute("hidden", collapsed);
+      backdrop.setAttribute("aria-hidden", collapsed ? "true" : "false");
+    }
+    document.body.classList.toggle("metrics-open", !collapsed && isMobileMetrics());
 
     try {
       localStorage.setItem("vwallMetricsCollapsed", collapsed ? "1" : "0");
@@ -134,9 +160,7 @@
   }
 
   function toggleMetricsPanel() {
-    const panel = document.getElementById("metricsPanel");
-    if (!panel) return;
-    setMetricsCollapsed(!panel.classList.contains("collapsed"));
+    setMetricsCollapsed(!isMetricsCollapsed());
   }
 
   function initMetricsPanelToggle() {
@@ -144,17 +168,38 @@
     if (!panel) return;
 
     const stored = localStorage.getItem("vwallMetricsCollapsed");
-    const collapsed = stored === "1";
+    let collapsed = stored === "1";
+    if (stored === null && isMobileMetrics()) collapsed = true;
     setMetricsCollapsed(collapsed);
 
     document.getElementById("perf")?.addEventListener("click", (e) => {
+      e.preventDefault();
       e.stopPropagation();
       toggleMetricsPanel();
     });
 
     document.getElementById("metricsCollapse")?.addEventListener("click", (e) => {
+      e.preventDefault();
       e.stopPropagation();
       toggleMetricsPanel();
+    });
+
+    document.getElementById("metricsCloseMobile")?.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setMetricsCollapsed(true);
+    });
+
+    document.getElementById("metricsBackdrop")?.addEventListener("click", () => {
+      setMetricsCollapsed(true);
+    });
+
+    global.matchMedia("(max-width: 899px), (max-height: 620px)").addEventListener("change", () => {
+      if (isMobileMetrics() && !isMetricsCollapsed()) {
+        document.body.classList.add("metrics-open");
+      } else {
+        document.body.classList.remove("metrics-open");
+      }
     });
   }
 
