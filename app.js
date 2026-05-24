@@ -501,7 +501,7 @@ function formatDrawerMeta(data) {
   if (data.probeMeta && window.VWallMeta) {
     return VWallMeta.formatMetaRows(data.probeMeta, data.mediaType);
   }
-  return '<p class="hint">Probing metadata…</p>';
+  return "";
 }
 
 function openPreview(data) {
@@ -515,23 +515,29 @@ function openPreview(data) {
 function openDrawer(data) {
   selected = data;
   const mt = data.mediaType || "image";
-  const meta = MEDIA_META[mt] || MEDIA_META.image;
   drawer.classList.add("open");
   drawer.innerHTML = `
-    <button class="close-btn" onclick="closeDrawer()">✕</button>
-    <span class="media-badge" style="background:${meta.color}">${meta.label} · ${mt}</span>
-    <h2>Media Inspector</h2>
+    <button type="button" class="close-btn" onclick="closeDrawer()">✕</button>
     ${drawerPreview(data)}
-    <div class="meta">
-      ${data.title ? `<p><span>Title:</span> ${escapeHtml(data.title)}</p>` : ""}
-      ${data.snippet ? `<p><span>Source:</span> ${escapeHtml(data.snippet)}</p>` : ""}
-      <p><span>Type:</span> ${mt}</p>
-      <div id="drawerMeta">${formatDrawerMeta(data)}</div>
-      <p><span>Cluster:</span> ${escapeHtml(data.clusterLabel || "")}</p>
+    <div class="meta drawer-meta-lite">
+      ${data.title ? `<p class="drawer-headline">${escapeHtml(data.title)}</p>` : ""}
+      ${data.snippet ? `<p class="drawer-snippet">${escapeHtml(data.snippet)}</p>` : ""}
       <a class="open-link" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
+      <button type="button" class="drawer-tech-toggle" aria-expanded="false">Technical details</button>
+      <div id="drawerTech" class="drawer-tech" hidden>
+        <div id="drawerMeta" class="preview-meta-body">${formatDrawerMeta(data)}</div>
+      </div>
     </div>
   `;
 
+  const techBtn = drawer.querySelector(".drawer-tech-toggle");
+  const techWrap = drawer.querySelector("#drawerTech");
+  techBtn?.addEventListener("click", () => {
+    const opening = !!techWrap?.hidden;
+    if (techWrap) techWrap.hidden = !opening;
+    techBtn?.setAttribute("aria-expanded", opening ? "true" : "false");
+    techBtn.textContent = opening ? "Hide technical details" : "Technical details";
+  });
   if (mt === "live" && data.url.includes(".m3u8") && window.Hls?.isSupported()) {
     const video = document.getElementById("drawerVideo");
     const hls = new Hls();

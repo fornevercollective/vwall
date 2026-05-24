@@ -196,9 +196,7 @@
     if (meta.mustream?.error) {
       push("ffprobe", `⚠ ${meta.mustream.error}`);
     } else if (meta.mustream?.ffprobe) {
-      push("ffprobe", "ok (MuStream)");
-    } else if (mediaType === "video" || mediaType === "live") {
-      push("ffprobe", "run `mustream probe-serve` for streams");
+      push("Probe", "ok");
     }
 
     return rows.join("");

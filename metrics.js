@@ -112,12 +112,15 @@
     const panel = document.getElementById("metricsPanel");
     const toggle = document.getElementById("perf");
     const inner = document.getElementById("metricsCollapse");
-    if (!panel || !toggle) return;
+    if (!panel) return;
 
     panel.classList.toggle("collapsed", collapsed);
+    panel.hidden = collapsed;
     panel.setAttribute("aria-hidden", collapsed ? "true" : "false");
-    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    toggle.title = collapsed ? "Show metrics panel" : "Hide metrics panel";
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      toggle.title = collapsed ? "Show metrics panel" : "Hide metrics panel";
+    }
     if (inner) {
       inner.textContent = collapsed ? "▸" : "▾";
       inner.setAttribute("aria-expanded", collapsed ? "false" : "true");
@@ -130,25 +133,28 @@
     }
   }
 
+  function toggleMetricsPanel() {
+    const panel = document.getElementById("metricsPanel");
+    if (!panel) return;
+    setMetricsCollapsed(!panel.classList.contains("collapsed"));
+  }
+
   function initMetricsPanelToggle() {
-    const toggle = document.getElementById("perf");
-    const inner = document.getElementById("metricsCollapse");
-    if (!toggle) return;
+    const panel = document.getElementById("metricsPanel");
+    if (!panel) return;
 
     const stored = localStorage.getItem("vwallMetricsCollapsed");
     const collapsed = stored === "1";
     setMetricsCollapsed(collapsed);
 
-    toggle.addEventListener("click", (e) => {
+    document.getElementById("perf")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      const isOpen = toggle.getAttribute("aria-expanded") === "true";
-      setMetricsCollapsed(isOpen);
+      toggleMetricsPanel();
     });
 
-    inner?.addEventListener("click", (e) => {
+    document.getElementById("metricsCollapse")?.addEventListener("click", (e) => {
       e.stopPropagation();
-      const isOpen = toggle.getAttribute("aria-expanded") === "true";
-      setMetricsCollapsed(isOpen);
+      toggleMetricsPanel();
     });
   }
 
@@ -159,6 +165,7 @@
     tickFrame,
     tickFps,
     setMetricsCollapsed,
+    toggleMetricsPanel,
     addBuffer(type, bytes) {
       if (wallMetrics.bufferBytes[type] != null && bytes) {
         wallMetrics.bufferBytes[type] += bytes;

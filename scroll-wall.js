@@ -89,7 +89,6 @@
     if (!panel) return;
     selectedKey = data.url;
     const mt = data.mediaType || "image";
-    const meta = global.MEDIA_META?.[mt] || { label: mt, color: "#444" };
 
     destroyInlinePlayback();
     document.body.classList.add("preview-open");
@@ -99,13 +98,11 @@
       <button type="button" class="inline-preview-close" aria-label="Close preview">↓</button>
       <div class="inline-preview-media">${previewMediaHtml(data)}</div>
       <div class="inline-preview-meta">
-        <span class="media-badge" style="background:${meta.color}">${meta.label}</span>
         ${data.title ? `<p class="preview-title">${escapeHtml(data.title)}</p>` : ""}
-        <p class="preview-genre">${escapeHtml(data.clusterLabel || "")}</p>
-        <button type="button" class="inline-preview-details-toggle" aria-expanded="false">Show details</button>
+        <a class="open-link preview-open-original" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
+        <button type="button" class="inline-preview-details-toggle" aria-expanded="false">Technical details</button>
         <div class="inline-preview-details" hidden>
-          <div id="inlinePreviewMeta" class="preview-meta-body"><p class="hint">Loading metadata…</p></div>
-          <a class="open-link" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
+          <div id="inlinePreviewMeta" class="preview-meta-body"></div>
         </div>
       </div>
     `;
@@ -158,7 +155,7 @@
     const toggle = panel.querySelector(".inline-preview-details-toggle");
     if (details) details.hidden = !open;
     if (toggle) {
-      toggle.textContent = open ? "Hide details" : "Show details";
+      toggle.textContent = open ? "Hide technical details" : "Technical details";
       toggle.setAttribute("aria-expanded", open ? "true" : "false");
     }
   }
