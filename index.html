@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0b">
 <title>VWall</title>
 <script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -9,54 +11,90 @@
 </head>
 <body>
 
-<div id="header">
-  <div class="header-left">
-    <div class="count-controls">
-      <label class="count-label">Count:
-        <input id="countSlider" type="range" min="10" max="20000" value="1000" step="50" />
-        <input id="countInput" type="number" min="10" max="20000" value="1000" step="1" title="Type a count (10–20000)" />
-      </label>
-      <div class="count-incr" role="group" aria-label="Add to count">
-        <button type="button" class="count-btn" data-count-add="100">+100</button>
-        <button type="button" class="count-btn" data-count-add="500">+500</button>
-        <button type="button" class="count-btn" data-count-add="1000">+1k</button>
-      </div>
-      <div class="count-presets" role="group" aria-label="Count presets">
-        <button type="button" class="count-btn" data-count-preset="250">250</button>
-        <button type="button" class="count-btn" data-count-preset="500">500</button>
-        <button type="button" class="count-btn" data-count-preset="1000">1k</button>
-        <button type="button" class="count-btn" data-count-preset="2500">2.5k</button>
-        <button type="button" class="count-btn" data-count-preset="5000">5k</button>
-        <button type="button" class="count-btn" data-count-preset="10000">10k</button>
-        <select id="countPresetSelect" class="count-preset-select" title="Saved presets on this device">
-          <option value="">My presets…</option>
-        </select>
-        <button type="button" id="countPresetSave" class="count-btn" title="Save current count as a personal preset">★</button>
-      </div>
+<header id="header" class="top-bar">
+  <button type="button" id="menuBtn" class="icon-btn mobile-only" aria-expanded="false" aria-controls="controlPanel">Controls</button>
+  <span class="brand mobile-only">VWall</span>
+
+  <div id="controlPanel" class="control-panel" aria-hidden="false">
+    <div class="sheet-header mobile-only">
+      <h2 class="sheet-title">Controls</h2>
+      <button type="button" id="sheetClose" class="icon-btn" aria-label="Close controls">✕</button>
     </div>
-    <label class="sort-label">Sort
-      <select id="sortMode" title="Layout order on the wall">
-        <option value="mixed">Mixed</option>
-        <option value="type">Media type</option>
-        <option value="resolution">Resolution ↓</option>
-        <option value="resolution-asc">Resolution ↑</option>
-        <option value="date">Date published ↓</option>
-        <option value="date-asc">Date published ↑</option>
-        <option value="exif">EXIF / camera</option>
-        <option value="format">Format / codec</option>
-        <option value="source">Source / provider</option>
-        <option value="cdn">CDN / region</option>
-      </select>
-    </label>
-    <div id="mediaFilters" class="media-filters" title="Show only selected media types"></div>
+
+    <section class="panel-section panel-meta mobile-only">
+      <h3 class="panel-heading">Metadata filter</h3>
+      <input id="metaSearch" type="search" placeholder="exif:canon codec:h264…" title="Filter loaded items by metadata" />
+    </section>
+
+    <section class="panel-section">
+      <h3 class="panel-heading mobile-only">Count</h3>
+      <div class="count-block">
+        <div class="count-row count-row-main">
+          <label class="count-label">Count:
+            <input id="countSlider" type="range" min="10" max="20000" value="1000" step="50" />
+            <input id="countInput" type="number" min="10" max="20000" value="1000" step="1" title="Type a count (10–20000)" inputmode="numeric" />
+          </label>
+          <div class="count-incr" role="group" aria-label="Add to count">
+            <button type="button" class="count-btn touch-target" data-count-add="100">+100</button>
+            <button type="button" class="count-btn touch-target" data-count-add="500">+500</button>
+            <button type="button" class="count-btn touch-target" data-count-add="1000">+1k</button>
+          </div>
+        </div>
+        <div class="count-presets" role="group" aria-label="Count presets">
+          <button type="button" class="count-btn touch-target" data-count-preset="250">250</button>
+          <button type="button" class="count-btn touch-target" data-count-preset="500">500</button>
+          <button type="button" class="count-btn touch-target" data-count-preset="1000">1k</button>
+          <button type="button" class="count-btn touch-target" data-count-preset="2500">2.5k</button>
+          <button type="button" class="count-btn touch-target" data-count-preset="5000">5k</button>
+          <button type="button" class="count-btn touch-target" data-count-preset="10000">10k</button>
+          <select id="countPresetSelect" class="count-preset-select touch-target" title="Saved presets">
+            <option value="">My presets…</option>
+          </select>
+          <button type="button" id="countPresetSave" class="count-btn touch-target" title="Save preset">★</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel-section panel-sort">
+      <h3 class="panel-heading mobile-only">Sort &amp; types</h3>
+      <label class="sort-label field-label">Sort
+        <select id="sortMode" class="touch-target" title="Layout order on the wall">
+          <option value="mixed">Mixed</option>
+          <option value="type">Media type</option>
+          <option value="resolution">Resolution ↓</option>
+          <option value="resolution-asc">Resolution ↑</option>
+          <option value="date">Date published ↓</option>
+          <option value="date-asc">Date published ↑</option>
+          <option value="exif">EXIF / camera</option>
+          <option value="format">Format / codec</option>
+          <option value="source">Source / provider</option>
+          <option value="cdn">CDN / region</option>
+        </select>
+      </label>
+      <p class="field-label mobile-only">Media types</p>
+      <div id="mediaFilters" class="media-filters"></div>
+    </section>
+
+    <section class="panel-section panel-view">
+      <h3 class="panel-heading mobile-only">View</h3>
+      <div class="view-tools">
+        <button type="button" id="layoutBtn" class="touch-target">Sphere</button>
+        <button type="button" id="blurBtn" class="touch-target">Blur: OFF</button>
+        <button type="button" id="blendBtn" class="touch-target">Blend: OFF</button>
+        <button type="button" id="reseedBtn" class="touch-target">Reseed</button>
+      </div>
+    </section>
   </div>
+
   <div class="header-right">
-    <button type="button" id="perf" class="perf-compact" aria-expanded="true" aria-controls="metricsPanel" title="Click to show or hide metrics panel">—</button>
+    <button type="button" id="perf" class="perf-compact touch-target" aria-expanded="true" aria-controls="metricsPanel" title="Metrics">—</button>
   </div>
-</div>
+</header>
+
+<div id="sheetBackdrop" class="sheet-backdrop mobile-only" aria-hidden="true"></div>
 
 <aside id="metricsPanel" aria-label="Performance metrics">
-  <div class="metrics-title">Metrics <button type="button" id="metricsCollapse" class="metrics-collapse-btn" aria-label="Collapse metrics panel">▾</button></div>
+  <div class="metrics-title">Metrics <button type="button" id="metricsCollapse" class="metrics-collapse-btn" aria-label="Collapse metrics">▾</button></div>
   <div class="metric-row"><span>FPS</span><strong id="mFps">—</strong></div>
   <div class="metric-row"><span>Memory</span><strong id="mMem">—</strong></div>
   <div class="metric-row"><span>Loaded</span><strong id="mLoad">—</strong></div>
@@ -65,18 +103,21 @@
   <div class="metric-row"><span>Buffer est.</span><strong id="mBuffer" class="metric-wide">—</strong></div>
   <div class="metric-row"><span>Probe</span><strong id="mProbe" class="metric-wide">—</strong></div>
   <div class="metric-row"><span>Cache</span><strong id="mCache" class="metric-wide">—</strong></div>
-  <p class="metrics-hint">Run <code>mustream probe-serve</code> for ffprobe / EXIF. Meta filter searches probed tags.</p>
+  <p class="metrics-hint">Run <code>mustream probe-serve</code> for ffprobe / EXIF.</p>
 </aside>
 
-<footer>
-  <input id="search" type="text" placeholder="Search media…" />
-  <input id="metaSearch" type="text" placeholder="exif:canon codec:h264 dims:1920x1080" title="Filter loaded items by metadata (Bridge-style)" />
-  <button id="searchBtn" onclick="runSearch()">Go</button>
-  <span id="searchStatus"></span>
-  <button id="layoutBtn" onclick="toggleLayout()">Sphere</button>
-  <button id="blurBtn" onclick="toggleBlur()">Blur: OFF</button>
-  <button id="blendBtn" onclick="toggleBlend()">Blend: OFF</button>
-  <button onclick="reseed()">Reseed</button>
+<div id="scrollViewport" class="scroll-viewport" aria-label="Media wall">
+  <div id="scrollWall" class="scroll-wall"></div>
+</div>
+
+<nav id="genreRail" class="genre-rail" aria-label="Genre filter"></nav>
+
+<div id="inlinePreview" class="inline-preview" aria-hidden="true"></div>
+
+<footer class="bottom-bar">
+  <input id="search" type="search" inputmode="search" autocomplete="off" placeholder="https://site.com + query · or keywords…" aria-label="Search" title="Site search: https://example.com + your terms. Also: site:example.com terms" />
+  <button type="button" id="searchBtn" class="btn-primary touch-target">Go</button>
+  <span id="searchStatus" class="search-status"></span>
 </footer>
 
 <div id="drawer"></div>
@@ -84,7 +125,9 @@
 <video id="video" controls style="display:none; width:100%; height:100%;"></video>
 <canvas id="c"></canvas>
 
+<script src="nav.js"></script>
 <script src="count-controls.js"></script>
+<script src="search-query.js"></script>
 <script src="session.js"></script>
 <script src="sort.js"></script>
 <script src="catalog.js"></script>
@@ -92,6 +135,7 @@
 <script src="probe-pool.js"></script>
 <script src="metadata.js"></script>
 <script src="metrics.js"></script>
+<script src="scroll-wall.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

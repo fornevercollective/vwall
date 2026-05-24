@@ -1,0 +1,302 @@
+/**
+ * Mobile scroll wall — 2D infinite scroll, genre rail, inline preview (no drawer).
+ */
+(function (global) {
+  const TILE = 92;
+  const EDGE_PX = 280;
+  let activeGenre = null;
+  let scrollExtendLock = false;
+  let selectedKey = null;
+
+  function useScrollWall() {
+    return global.matchMedia("(max-width: 899px)").matches;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function previewMediaHtml(data) {
+    const url = escapeHtml(data.url);
+    const mt = data.mediaType || "image";
+    if (mt === "audio") return `<audio controls src="${url}" crossorigin="anonymous" playsinline></audio>`;
+    if (mt === "video" || mt === "live") {
+      return `<video id="inlinePreviewVideo" controls playsinline src="${url}" crossorigin="anonymous"></video>`;
+    }
+    if (mt === "gsplat") return `<p class="hint">Open in a Gaussian splat viewer.</p>`;
+    return `<img src="${url}" alt="" crossorigin="anonymous" />`;
+  }
+
+  function destroyInlinePlayback() {
+    const v = document.getElementById("inlinePreviewVideo");
+    if (v?._hls) {
+      v._hls.destroy();
+      v._hls = null;
+    }
+  }
+
+  function openInlinePreview(data) {
+    const panel = document.getElementById("inlinePreview");
+    if (!panel) return;
+    selectedKey = data.url;
+    const mt = data.mediaType || "image";
+    const meta = global.MEDIA_META?.[mt] || { label: mt, color: "#444" };
+
+    destroyInlinePlayback();
+    document.body.classList.add("preview-open");
+    panel.classList.add("open");
+    panel.setAttribute("aria-hidden", "false");
+    panel.innerHTML = `
+      <button type="button" class="inline-preview-close" aria-label="Close preview">↓</button>
+      <div class="inline-preview-media">${previewMediaHtml(data)}</div>
+      <div class="inline-preview-meta">
+        <span class="media-badge" style="background:${meta.color}">${meta.label}</span>
+        ${data.title ? `<p class="preview-title">${escapeHtml(data.title)}</p>` : ""}
+        <p class="preview-genre">${escapeHtml(data.clusterLabel || "")}</p>
+        <div id="inlinePreviewMeta" class="preview-meta-body"><p class="hint">Loading metadata…</p></div>
+        <a class="open-link" href="${escapeHtml(data.url)}" target="_blank" rel="noopener">Open original</a>
+      </div>
+    `;
+
+    panel.querySelector(".inline-preview-close")?.addEventListener("click", closeInlinePreview);
+
+    if (mt === "live" && data.url.includes(".m3u8") && global.Hls?.isSupported()) {
+      const video = document.getElementById("inlinePreviewVideo");
+      const hls = new Hls();
+      hls.loadSource(data.url);
+      hls.attachMedia(video);
+      video._hls = hls;
+    }
+
+    if (!data.probeMeta && global.VWallProbePool) {
+      global.VWallProbePool.probeCached({
+        url: data.url,
+        mediaType: mt
+      }).then((r) => {
+        data.probeMeta = r?.meta;
+        const el = document.getElementById("inlinePreviewMeta");
+        if (el && selectedKey === data.url && global.VWallMeta) {
+          el.innerHTML = global.VWallMeta.formatMetaRows(r.meta, mt);
+        }
+      });
+    } else if (data.probeMeta && global.VWallMeta) {
+      const el = document.getElementById("inlinePreviewMeta");
+      if (el) el.innerHTML = global.VWallMeta.formatMetaRows(data.probeMeta, mt);
+    }
+  }
+
+  function closeInlinePreview() {
+    destroyInlinePlayback();
+    document.body.classList.remove("preview-open");
+    const panel = document.getElementById("inlinePreview");
+    panel?.classList.remove("open");
+    panel?.setAttribute("aria-hidden", "true");
+    selectedKey = null;
+  }
+
+  function entryPayload(e) {
+    const n = e.node;
+    return {
+      url: e.item.url,
+      title: e.item.title,
+      snippet: e.item.snippet,
+      mediaType: e.item.mediaType,
+      clusterLabel: n?.clusterLabel || e.item.genre || "",
+      probeMeta: e.probeMeta || n?.probeMeta,
+      thumbUrl: e.item.thumbUrl,
+      mime: e.item.mime
+    };
+  }
+
+  function buildTile(e) {
+    const item = e.item;
+    const mt = item.mediaType;
+    const meta = global.MEDIA_META?.[mt] || { label: "?", color: "#444" };
+    const genre = e.node?.clusterLabel || e.item.genre || "other";
+    const thumb = item.thumbUrl || (["image", "gif"].includes(mt) ? item.url : null);
+
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "scroll-tile";
+    tile.dataset.key = global.VWallSession?.key(item) || item.url;
+    tile.dataset.genre = genre;
+    tile.style.setProperty("--tile-accent", meta.color);
+
+    if (thumb) {
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.alt = item.title || "";
+      img.src = thumb;
+      img.crossOrigin = "anonymous";
+      tile.appendChild(img);
+    } else {
+      const ph = document.createElement("span");
+      ph.className = "scroll-tile-ph";
+      ph.textContent = meta.label;
+      tile.appendChild(ph);
+    }
+
+    const badge = document.createElement("span");
+    badge.className = "scroll-tile-badge";
+    badge.textContent = meta.label;
+    tile.appendChild(badge);
+
+    tile.addEventListener("click", () => {
+      document.querySelectorAll(".scroll-tile.selected").forEach((t) => t.classList.remove("selected"));
+      tile.classList.add("selected");
+      openInlinePreview(entryPayload(e));
+    });
+
+    return tile;
+  }
+
+  function groupEntries(entries) {
+    const groups = new Map();
+    for (const e of entries) {
+      const g = e.node?.clusterLabel || e.item.genre || "other";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(e);
+    }
+    const labels = global.clusterLabels || [...groups.keys()];
+    const ordered = [];
+    for (const label of labels) {
+      if (groups.has(label)) ordered.push({ label, items: groups.get(label) });
+    }
+    for (const [label, items] of groups) {
+      if (!labels.includes(label)) ordered.push({ label, items });
+    }
+    return ordered;
+  }
+
+  function mount(entries) {
+    const wall = document.getElementById("scrollWall");
+    const viewport = document.getElementById("scrollViewport");
+    if (!wall || !viewport) return;
+
+    document.body.classList.add("scroll-mode");
+    closeInlinePreview();
+
+    const filtered = activeGenre
+      ? entries.filter((e) => (e.node?.clusterLabel || e.item.genre) === activeGenre)
+      : entries;
+
+    wall.innerHTML = "";
+    const groups = groupEntries(filtered);
+
+    for (const { label, items } of groups) {
+      const section = document.createElement("section");
+      section.className = "scroll-genre-section";
+      section.id = "genre-" + label.replace(/\s+/g, "-");
+      section.dataset.genre = label;
+
+      const head = document.createElement("h3");
+      head.className = "scroll-genre-head";
+      head.textContent = label;
+      section.appendChild(head);
+
+      const grid = document.createElement("div");
+      grid.className = "scroll-grid";
+      for (const e of items) {
+        grid.appendChild(buildTile(e));
+      }
+      section.appendChild(grid);
+      wall.appendChild(section);
+    }
+
+    const cols = Math.max(4, Math.ceil(Math.sqrt(filtered.length * 1.4)));
+    const rows = Math.ceil(filtered.length / cols) || 1;
+    wall.style.minWidth = `${cols * TILE + 32}px`;
+    wall.style.minHeight = `${rows * TILE + groups.length * 36 + 32}px`;
+
+    requestAnimationFrame(() => observeScrollEdges(viewport));
+  }
+
+  function observeScrollEdges(viewport) {
+    viewport.onscroll = () => {
+      if (scrollExtendLock) return;
+      const { scrollTop, scrollLeft, clientHeight, clientWidth, scrollHeight, scrollWidth } =
+        viewport;
+      const nearBottom = scrollTop + clientHeight >= scrollHeight - EDGE_PX;
+      const nearRight = scrollLeft + clientWidth >= scrollWidth - EDGE_PX;
+      if (nearBottom || nearRight) {
+        scrollExtendLock = true;
+        global.onScrollWallExtend?.().finally(() => {
+          setTimeout(() => {
+            scrollExtendLock = false;
+          }, 800);
+        });
+      }
+    };
+  }
+
+  function initGenreRail(labels, onGenreChange) {
+    const rail = document.getElementById("genreRail");
+    if (!rail) return;
+
+    const render = () => {
+      rail.innerHTML = "";
+      const all = document.createElement("button");
+      all.type = "button";
+      all.className = "genre-chip" + (activeGenre === null ? " active" : "");
+      all.textContent = "All";
+      all.addEventListener("click", () => {
+        activeGenre = null;
+        render();
+        onGenreChange();
+      });
+      rail.appendChild(all);
+
+      for (const label of labels) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "genre-chip" + (activeGenre === label ? " active" : "");
+        chip.textContent = label;
+        chip.title = label;
+        chip.addEventListener("click", () => {
+          activeGenre = activeGenre === label ? null : label;
+          render();
+          onGenreChange();
+          if (activeGenre) {
+            document.getElementById("genre-" + label.replace(/\s+/g, "-"))?.scrollIntoView({
+              behavior: "smooth",
+              block: "start"
+            });
+          }
+        });
+        rail.appendChild(chip);
+      }
+    };
+
+    render();
+  }
+
+  function setActiveGenre(g) {
+    activeGenre = g;
+  }
+
+  function init() {
+    global.matchMedia("(max-width: 899px)").addEventListener("change", () => {
+      document.body.classList.toggle("scroll-mode", useScrollWall());
+      if (!useScrollWall()) closeInlinePreview();
+    });
+    document.body.classList.toggle("scroll-mode", useScrollWall());
+  }
+
+  global.VWallScroll = {
+    useScrollWall,
+    mount,
+    init,
+    initGenreRail,
+    openInlinePreview,
+    closeInlinePreview,
+    setActiveGenre,
+    getActiveGenre: () => activeGenre
+  };
+
+  init();
+})(window);

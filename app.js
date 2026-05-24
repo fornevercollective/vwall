@@ -56,6 +56,9 @@ const MEDIA_META = {
   audio: { label: "AUD", color: "#9966cc", order: 5, chip: "#9966cc" }
 };
 
+window.clusterLabels = clusterLabels;
+window.MEDIA_META = MEDIA_META;
+
 const activeMediaTypes = new Set(
   JSON.parse(localStorage.getItem("vwallMediaTypes") || "null") || MEDIA_TYPES
 );
@@ -206,16 +209,21 @@ async function searchWikimedia(query, maxItems, searchQuery) {
   return results;
 }
 
-async function searchOpenverseImages(query, maxItems) {
+async function searchOpenverseImages(query, maxItems, opts = {}) {
   const results = [];
   const pageSize = 20;
   let page = 1;
   const maxPages = Math.min(60, Math.ceil(maxItems / pageSize) + 2);
+  const source = opts.openverseSource;
 
   while (results.length < maxItems * 2 && page <= maxPages) {
-    const url =
-      `https://api.openverse.org/v1/images/?q=${encodeURIComponent(query)}` +
-      `&page=${page}&page_size=${pageSize}`;
+    const params = new URLSearchParams({
+      q: query,
+      page: String(page),
+      page_size: String(pageSize)
+    });
+    if (source) params.set("source", source);
+    const url = `https://api.openverse.org/v1/images/?${params}`;
     const res = await fetch(url);
     if (!res.ok) break;
     const data = await res.json();
@@ -253,18 +261,23 @@ async function searchOpenverseImages(query, maxItems) {
   return results;
 }
 
-async function searchOpenverseAudio(query, maxItems) {
+async function searchOpenverseAudio(query, maxItems, opts = {}) {
   if (!acceptsMediaType("audio")) return [];
 
   const results = [];
   const pageSize = 20;
   let page = 1;
   const maxPages = Math.min(40, Math.ceil(maxItems / pageSize) + 2);
+  const source = opts.openverseSource;
 
   while (results.length < maxItems && page <= maxPages) {
-    const url =
-      `https://api.openverse.org/v1/audio/?q=${encodeURIComponent(query)}` +
-      `&page=${page}&page_size=${pageSize}`;
+    const params = new URLSearchParams({
+      q: query,
+      page: String(page),
+      page_size: String(pageSize)
+    });
+    if (source) params.set("source", source);
+    const url = `https://api.openverse.org/v1/audio/?${params}`;
     const res = await fetch(url);
     if (!res.ok) break;
     const data = await res.json();
@@ -302,33 +315,123 @@ const SPECIAL_SEARCHES = {
   gif: (q) => `${q} animated gif`
 };
 
-function cacheKeyForFetch(q, limit, excludeSize) {
-  return `${q}|${limit}|${[...activeMediaTypes].sort().join(",")}|${excludeSize}`;
+async function searchArchiveOrg(siteHost, terms, maxItems) {
+  const results = [];
+  const parts = [`hostname:${siteHost}`];
+  if (terms) parts.push(terms);
+  parts.push("mediatype:(image OR movies OR audio OR etree)");
+  const q = parts.join(" AND ");
+  const rows = Math.min(80, Math.max(maxItems, 20));
+
+  try {
+    const params = new URLSearchParams({
+      q,
+      output: "json",
+      rows: String(rows),
+      page: "1"
+    });
+    params.append("fl[]", "identifier,title,description,mediatype");
+    const res = await fetch(`https://archive.org/advancedsearch.php?${params}`);
+    if (!res.ok) return results;
+    const data = await res.json();
+    const docs = data.response?.docs || [];
+
+    for (const doc of docs) {
+      const id = doc.identifier;
+      if (!id) continue;
+      const title = doc.title || id;
+      const mt =
+        doc.mediatype === "movies"
+          ? "video"
+          : doc.mediatype === "audio" || doc.mediatype === "etree"
+            ? "audio"
+            : "image";
+      if (!acceptsMediaType(mt)) continue;
+
+      const pageUrl = `https://archive.org/details/${id}`;
+      const imgUrl = `https://archive.org/services/img/${encodeURIComponent(id)}`;
+      const url = mt === "image" ? imgUrl : pageUrl;
+
+      results.push(
+        mediaItem({
+          url,
+          thumbUrl: mt === "image" ? imgUrl : null,
+          title: Array.isArray(title) ? title[0] : title,
+          snippet: `Internet Archive · ${siteHost}`,
+          mime: mt === "image" ? "image/jpeg" : "",
+          mediaType: mt,
+          source: "archive.org",
+          provider: "archive.org"
+        })
+      );
+      if (results.length >= maxItems) break;
+    }
+  } catch (e) {
+    console.warn("Archive.org search failed:", e);
+  }
+
+  return results;
+}
+
+function cacheKeyForFetch(q, limit, excludeSize, siteHost) {
+  return `${q}|${limit}|${[...activeMediaTypes].sort().join(",")}|${excludeSize}|${siteHost || ""}`;
+}
+
+function parseSearch(raw) {
+  if (window.VWallSearchQuery) return VWallSearchQuery.parseSiteSearchInput(raw);
+  return { terms: (raw || "").trim(), siteHost: null, raw, scoped: false };
+}
+
+function matchesSite(item, siteHost) {
+  if (!siteHost) return true;
+  if (window.VWallSearchQuery) return VWallSearchQuery.itemMatchesSite(item, siteHost);
+  return true;
 }
 
 async function fetchMediaResults(query, limit, opts = {}) {
-  const q = query.trim();
-  if (!q || activeMediaTypes.size === 0) return [];
+  const parsed = opts.parsed || parseSearch(query);
+  const q = window.VWallSearchQuery
+    ? VWallSearchQuery.buildApiQuery(parsed)
+    : (parsed.terms || query || "").trim();
+  const siteHost = parsed.siteHost || opts.siteHost || null;
+
+  if ((!q && !siteHost) || activeMediaTypes.size === 0) return [];
 
   const exclude = opts.exclude || new Set();
   const target = Math.min(limit, MAX_WALL_ITEMS);
-  const ck = cacheKeyForFetch(q, target, exclude.size);
+  const ck = cacheKeyForFetch(q || siteHost, target, exclude.size, siteHost);
   const cached = apiResultCache.get(ck);
   if (cached && Date.now() - cached.t < API_CACHE_TTL_MS) {
     return cached.items.filter((it) => !exclude.has(`${it.mediaType}:${it.url}`));
   }
 
   const perSource = Math.ceil(target / Math.max(1, activeMediaTypes.size)) + 15;
-  const batches = [searchWikimedia(q, perSource)];
+  const ovSource =
+    siteHost && window.VWallSearchQuery
+      ? VWallSearchQuery.openverseSourceForHost(siteHost)
+      : null;
+  const ovOpts = ovSource ? { openverseSource: ovSource } : {};
+  const batches = [];
+
+  const useWikimedia =
+    !siteHost ||
+    (window.VWallSearchQuery && VWallSearchQuery.isWikimediaFamily(siteHost));
+
+  if (useWikimedia) {
+    batches.push(searchWikimedia(q, perSource));
+  }
 
   if (activeMediaTypes.has("image") || activeMediaTypes.has("gif") || activeMediaTypes.has("video")) {
-    batches.push(searchOpenverseImages(q, perSource));
+    batches.push(searchOpenverseImages(q, perSource, ovOpts));
   }
   if (activeMediaTypes.has("audio")) {
-    batches.push(searchOpenverseAudio(q, perSource));
+    batches.push(searchOpenverseAudio(q, perSource, ovOpts));
+  }
+  if (siteHost) {
+    batches.push(searchArchiveOrg(siteHost, parsed.terms, perSource));
   }
   for (const type of ["gsplat", "live", "gif"]) {
-    if (activeMediaTypes.has(type) && SPECIAL_SEARCHES[type]) {
+    if (activeMediaTypes.has(type) && SPECIAL_SEARCHES[type] && useWikimedia) {
       batches.push(searchWikimedia(q, Math.ceil(perSource / 2), SPECIAL_SEARCHES[type](q)));
     }
   }
@@ -340,6 +443,7 @@ async function fetchMediaResults(query, limit, opts = {}) {
   for (const item of raw) {
     const key = `${item.mediaType}:${item.url}`;
     if (seen.has(key)) continue;
+    if (!matchesSite(item, siteHost)) continue;
     seen.add(key);
     if (!acceptsMediaType(item.mediaType)) continue;
     merged.push(item);
@@ -389,6 +493,14 @@ function formatDrawerMeta(data) {
     return VWallMeta.formatMetaRows(data.probeMeta, data.mediaType);
   }
   return '<p class="hint">Probing metadata…</p>';
+}
+
+function openPreview(data) {
+  if (window.VWallScroll?.useScrollWall()) {
+    VWallScroll.openInlinePreview(data);
+    return;
+  }
+  openDrawer(data);
 }
 
 function openDrawer(data) {
@@ -457,14 +569,24 @@ canvas.addEventListener("pointerdown", () => {
 // ==========================
 // SEMANTIC EMBEDDING
 // ==========================
-function semanticEmbed(i, seed) {
+function clusterFromKey(itemKey, fallbackIndex) {
+  if (itemKey) {
+    let h = 0;
+    for (let j = 0; j < itemKey.length; j++) h = (h * 31 + itemKey.charCodeAt(j)) | 0;
+    return Math.abs(h) % NUM_CLUSTERS;
+  }
+  return (fallbackIndex ?? 0) % NUM_CLUSTERS;
+}
+
+function semanticEmbed(i, seed, itemKey) {
+  const cluster = clusterFromKey(itemKey, i);
   const t = i * 0.3 + (seed || 0);
-  const radius = 600 + Math.random() * 400;
+  const radius = 600 + (i % 11) * 36;
   return {
     x: Math.cos(t) * radius + Math.sin(t * 1.7) * 200,
     y: Math.sin(t * 1.3) * radius + Math.cos(t * 0.9) * 200,
-    cluster: Math.floor(Math.random() * NUM_CLUSTERS),
-    clusterLabel: clusterLabels[Math.floor(Math.random() * NUM_CLUSTERS)]
+    cluster,
+    clusterLabel: clusterLabels[cluster]
   };
 }
 
@@ -637,12 +759,41 @@ function layoutPosition(i, n) {
   };
 }
 
+function remountScrollWall() {
+  if (!window.VWallScroll?.useScrollWall()) return;
+  let entries = session().getDisplayEntries(getWallCount());
+  entries = sortDisplayEntries(entries);
+  entries = applyMetaFilter(entries);
+  VWallScroll.mount(entries);
+}
+
 function mountDisplayEntries(entries) {
+  const scrollMode = window.VWallScroll?.useScrollWall();
+  if (scrollMode) {
+    canvas.style.display = "none";
+    app.view.style.pointerEvents = "none";
+    entries.forEach((e, i) => {
+      const emb = semanticEmbed(i, seed, e.key);
+      e.item.genre = emb.clusterLabel;
+      if (e.node) {
+        e.node.cluster = emb.cluster;
+        e.node.clusterLabel = emb.clusterLabel;
+      }
+    });
+    VWallScroll.mount(entries);
+    return;
+  }
+
+  canvas.style.display = "block";
+  app.view.style.pointerEvents = "auto";
+  if (drawer.classList.contains("open")) window.closeDrawer?.();
+
   const visible = new Set(entries.map((e) => e.key));
   nodes = [];
 
   entries.forEach((e, i) => {
-    const emb = semanticEmbed(i, seed);
+    const emb = semanticEmbed(i, seed, e.key);
+    e.item.genre = emb.clusterLabel;
     const { bx, by } = layoutPosition(i, entries.length);
 
     if (e.node && e.node._thumbLoaded) {
@@ -675,8 +826,12 @@ function mountDisplayEntries(entries) {
   }
 }
 
+function getMetaSearchQuery() {
+  return document.getElementById("metaSearch")?.value?.trim() || "";
+}
+
 function applyMetaFilter(entries) {
-  const metaQ = document.getElementById("metaSearch")?.value?.trim();
+  const metaQ = getMetaSearchQuery();
   if (!metaQ || !window.VWallCatalog) return entries;
   const items = entries.map((e) => e.item);
   const filtered = VWallCatalog.filterItems(items, metaQ);
@@ -695,7 +850,16 @@ function sortDisplayEntries(entries) {
 async function syncUniverse(query, opts = {}) {
   const gen = ++searchGen;
   const count = getWallCount();
-  const q = (query && query.trim()) || defaultExploreQuery();
+  let rawInput = (query && query.trim()) || "";
+  let parsed = opts.parsed || parseSearch(rawInput);
+  if (!rawInput) {
+    rawInput = defaultExploreQuery();
+    if (!opts.parsed) parsed = parseSearch(rawInput);
+  }
+  const q = rawInput;
+  const searchLabel = window.VWallSearchQuery
+    ? VWallSearchQuery.displaySearchLabel(parsed)
+    : q;
   const layoutOnly = opts.layoutOnly === true;
   const extendOnly = opts.extendOnly === true;
   const filterOnly = opts.filterOnly === true;
@@ -716,7 +880,8 @@ async function syncUniverse(query, opts = {}) {
   lazyGen++;
   const lazyGenLocal = lazyGen;
   searchBtn.disabled = true;
-  setSearchStatus(queryChanged ? `Searching “${q}”…` : `Extending “${q}”…`);
+  const statusQ = parsed.scoped ? searchLabel : q;
+  setSearchStatus(queryChanged ? `Searching “${statusQ}”…` : `Extending “${statusQ}”…`);
 
   if (activeMediaTypes.size === 0) {
     setSearchStatus("Enable at least one media type");
@@ -743,7 +908,11 @@ async function syncUniverse(query, opts = {}) {
 
   if (need > 0 && !filterOnly) {
     try {
-      const fetched = await fetchMediaResults(q, need, { exclude: session().keys() });
+      const fetched = await fetchMediaResults(q, need, {
+        exclude: session().keys(),
+        parsed,
+        siteHost: parsed.siteHost
+      });
       if (gen !== searchGen) return;
       for (const item of fetched) {
         const key = session().key(item);
@@ -853,7 +1022,16 @@ function createWallNode(item, bx, by, emb) {
   container.blendMode = blendEnabled ? PIXI.BLEND_MODES.ADD : PIXI.BLEND_MODES.NORMAL;
   container.eventMode = "static";
   container.cursor = "pointer";
-  container.on("pointertap", () => openDrawer(container));
+  container.on("pointertap", () =>
+    openPreview({
+      url: container.url,
+      title: container.title,
+      snippet: container.snippet,
+      mediaType: container.mediaType,
+      clusterLabel: container.clusterLabel,
+      probeMeta: container.probeMeta
+    })
+  );
 
   return container;
 }
@@ -863,23 +1041,39 @@ function createWallNode(item, bx, by, emb) {
 // ==========================
 window.runSearch = async () => {
   const input = document.getElementById("search");
-  const q = input.value.trim();
-  if (!q) {
+  const raw = input?.value.trim();
+  const parsed = parseSearch(raw);
+  if (!raw) {
+    setSearchStatus("Enter a search term or https://site.com + query");
+    return;
+  }
+  if (parsed.scoped && !parsed.siteHost) {
+    setSearchStatus("Invalid site URL — use https://example.com + terms");
+    return;
+  }
+  if (!parsed.scoped && !parsed.terms) {
     setSearchStatus("Enter a search term");
     return;
   }
   seed++;
   session().displayOrder = [];
-  await syncUniverse(q);
-  input.blur();
+  await syncUniverse(raw, { parsed });
+  input?.blur();
+  window.VWallNav?.closeSheet?.();
 };
 
-document.getElementById("search").addEventListener("keydown", e => {
+document.getElementById("search")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
     window.runSearch();
   }
 });
+
+document.getElementById("searchBtn")?.addEventListener("click", () => window.runSearch());
+document.getElementById("layoutBtn")?.addEventListener("click", () => window.toggleLayout());
+document.getElementById("blurBtn")?.addEventListener("click", () => window.toggleBlur());
+document.getElementById("blendBtn")?.addEventListener("click", () => window.toggleBlend());
+document.getElementById("reseedBtn")?.addEventListener("click", () => window.reseed());
 
 // ==========================
 // TOGGLES
@@ -947,6 +1141,7 @@ window.addEventListener("pointermove", e => {
 // ==========================
 app.ticker.add(() => {
   if (window.VWallMetrics) VWallMetrics.tickFrame();
+  if (window.VWallScroll?.useScrollWall()) return;
 
   scale += (targetScale - scale) * 0.08;
   world.scale.set(scale);
@@ -1026,8 +1221,34 @@ document.getElementById("metaSearch")?.addEventListener("input", () => {
 // INIT
 // ==========================
 document.getElementById("search").placeholder =
-  "Search media — images, video, audio, 3D…";
+  "https://site.com + query · or keywords…";
 initMediaFilters();
+
+if (window.VWallScroll) {
+  VWallScroll.initGenreRail(clusterLabels, remountScrollWall);
+  window.onScrollWallExtend = async () => {
+    const q = document.getElementById("search").value.trim() || session().lastQuery;
+    const current = session().displayOrder.length;
+    if (current >= MAX_WALL_ITEMS) return;
+    const bump = Math.min(250, MAX_WALL_ITEMS - current);
+    const next = Math.min(getWallCount() + bump, MAX_WALL_ITEMS);
+    if (window.VWallCount) VWallCount.setCount(next);
+    else {
+      const input = document.getElementById("countInput");
+      const slider = document.getElementById("countSlider");
+      if (input) input.value = String(next);
+      if (slider) slider.value = String(next);
+    }
+    await syncUniverse(q, { extendOnly: true });
+  };
+  globalThis.matchMedia("(max-width: 899px)").addEventListener("change", () => {
+    let entries = session().getDisplayEntries(getWallCount());
+    entries = sortDisplayEntries(entries);
+    entries = applyMetaFilter(entries);
+    mountDisplayEntries(entries);
+  });
+}
+
 buildUniverse(null);
 
 // ==========================
@@ -1046,4 +1267,6 @@ if (window.VWallCountPresets) {
     await syncUniverse(q, { extendOnly: opts?.extendOnly === true });
   });
 }
+
+if (window.VWallNav) VWallNav.initNav();
 
