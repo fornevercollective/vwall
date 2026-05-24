@@ -694,7 +694,7 @@ function sortDisplayEntries(entries) {
 // ==========================
 async function syncUniverse(query, opts = {}) {
   const gen = ++searchGen;
-  const count = parseInt(countSlider.value, 10) || 1000;
+  const count = getWallCount();
   const q = (query && query.trim()) || defaultExploreQuery();
   const layoutOnly = opts.layoutOnly === true;
   const extendOnly = opts.extendOnly === true;
@@ -1031,23 +1031,19 @@ initMediaFilters();
 buildUniverse(null);
 
 // ==========================
-// COUNT SLIDER
+// COUNT CONTROLS
 // ==========================
-const countSlider = document.getElementById("countSlider");
-const countVal = document.getElementById("countVal");
-let sliderTimeout;
+function getWallCount() {
+  if (window.VWallCount) return VWallCount.getCount();
+  const input = document.getElementById("countInput");
+  const slider = document.getElementById("countSlider");
+  return parseInt(input?.value || slider?.value, 10) || 1000;
+}
 
-let lastSliderCount = parseInt(countSlider.value, 10) || 1000;
-
-countSlider.addEventListener("input", () => {
-  const v = parseInt(countSlider.value, 10);
-  countVal.innerText = v;
-  clearTimeout(sliderTimeout);
-  sliderTimeout = setTimeout(async () => {
+if (window.VWallCountPresets) {
+  VWallCountPresets.initCountControls(async (opts) => {
     const q = document.getElementById("search").value.trim() || null;
-    const extendOnly = v > lastSliderCount;
-    lastSliderCount = v;
-    await syncUniverse(q, { extendOnly });
-  }, 400);
-});
+    await syncUniverse(q, { extendOnly: opts?.extendOnly === true });
+  });
+}
 

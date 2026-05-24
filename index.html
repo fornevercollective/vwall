@@ -11,7 +11,29 @@
 
 <div id="header">
   <div class="header-left">
-    <label>Count: <input id="countSlider" type="range" min="10" max="20000" value="1000" step="50" /><span id="countVal">1000</span></label>
+    <div class="count-controls">
+      <label class="count-label">Count:
+        <input id="countSlider" type="range" min="10" max="20000" value="1000" step="50" />
+        <input id="countInput" type="number" min="10" max="20000" value="1000" step="1" title="Type a count (10–20000)" />
+      </label>
+      <div class="count-incr" role="group" aria-label="Add to count">
+        <button type="button" class="count-btn" data-count-add="100">+100</button>
+        <button type="button" class="count-btn" data-count-add="500">+500</button>
+        <button type="button" class="count-btn" data-count-add="1000">+1k</button>
+      </div>
+      <div class="count-presets" role="group" aria-label="Count presets">
+        <button type="button" class="count-btn" data-count-preset="250">250</button>
+        <button type="button" class="count-btn" data-count-preset="500">500</button>
+        <button type="button" class="count-btn" data-count-preset="1000">1k</button>
+        <button type="button" class="count-btn" data-count-preset="2500">2.5k</button>
+        <button type="button" class="count-btn" data-count-preset="5000">5k</button>
+        <button type="button" class="count-btn" data-count-preset="10000">10k</button>
+        <select id="countPresetSelect" class="count-preset-select" title="Saved presets on this device">
+          <option value="">My presets…</option>
+        </select>
+        <button type="button" id="countPresetSave" class="count-btn" title="Save current count as a personal preset">★</button>
+      </div>
+    </div>
     <label class="sort-label">Sort
       <select id="sortMode" title="Layout order on the wall">
         <option value="mixed">Mixed</option>
@@ -62,6 +84,7 @@
 <video id="video" controls style="display:none; width:100%; height:100%;"></video>
 <canvas id="c"></canvas>
 
+<script src="count-controls.js"></script>
 <script src="session.js"></script>
 <script src="sort.js"></script>
 <script src="catalog.js"></script>

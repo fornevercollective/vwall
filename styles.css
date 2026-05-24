@@ -44,15 +44,74 @@ canvas {
   color: #aaa;
 }
 
+.count-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.count-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #aaa;
+}
+
 #countSlider {
-  width: 160px;
+  width: 120px;
   accent-color: #666;
 }
 
-#countVal {
+#countInput {
+  width: 4.5rem;
+  padding: 3px 6px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #1a1a1a;
   color: #fff;
   font-weight: 600;
-  min-width: 36px;
+  font-size: 13px;
+  font-family: "SF Mono", "Consolas", monospace;
+}
+
+#countInput:focus {
+  border-color: #666;
+  outline: none;
+}
+
+.count-incr,
+.count-presets {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.count-btn {
+  padding: 3px 7px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #222;
+  color: #ccc;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.count-btn:hover {
+  background: #333;
+  color: #fff;
+}
+
+.count-preset-select {
+  padding: 3px 6px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #aaa;
+  font-size: 11px;
+  max-width: 7rem;
 }
 
 .header-right {
