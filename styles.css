@@ -20,10 +20,6 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-body.sheet-open {
-  overflow: hidden;
-}
-
 .mobile-only {
   display: none;
 }
@@ -94,42 +90,43 @@ body.scroll-mode .genre-rail-wrap {
   box-sizing: border-box;
 }
 
-.scroll-genre-section {
-  margin-bottom: 20px;
-}
-
-.scroll-genre-head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  margin: 0 0 10px;
-  padding: 8px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #9a8acc;
-  background: rgba(11, 11, 11, 0.92);
-  backdrop-filter: blur(6px);
-  border-radius: 6px;
-}
-
 .scroll-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
-  gap: 6px;
+  gap: 4px;
   width: 100%;
+}
+
+/* Sphere / stream — vertical feed, no section blocks */
+.scroll-wall-stream {
+  width: 100%;
+  max-width: 100%;
+}
+
+.scroll-grid-stream {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+}
+
+body.scroll-layout-stream .scroll-viewport {
+  overflow-x: hidden;
+}
+
+/* Checkerboard / freeform — 2D canvas, flat mosaic (genre via rail only) */
+.scroll-grid-freeform {
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  gap: 4px;
 }
 
 .scroll-tile {
   position: relative;
   aspect-ratio: 1;
   padding: 0;
-  border: 2px solid transparent;
-  border-radius: 10px;
+  border: none;
+  border-radius: 6px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--tile-accent, #333) 35%, #1a1a1a);
+  background: color-mix(in srgb, var(--tile-accent, #333) 28%, #1a1a1a);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .scroll-tile img {
@@ -163,8 +160,13 @@ body.scroll-mode .genre-rail-wrap {
 }
 
 .scroll-tile.selected {
-  border-color: #8af;
-  box-shadow: 0 0 0 2px rgba(136, 170, 255, 0.35);
+  outline: 2px solid #8af;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 1px rgba(136, 170, 255, 0.4);
+}
+
+.scroll-tile:active {
+  opacity: 0.85;
 }
 
 .genre-rail-wrap {
@@ -349,23 +351,43 @@ body.scroll-mode #c {
   display: none !important;
 }
 
-/* HEADER */
-#header.top-bar {
+/* TOP CHROME — panel is sibling of header (avoids backdrop-filter trap) */
+.top-chrome {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   padding: calc(6px + var(--safe-top)) calc(8px + var(--safe-right)) 6px calc(8px + var(--safe-left));
   background: rgba(15, 15, 15, 0.94);
-  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #222;
+  color: #ccc;
+  font-size: 13px;
+}
+
+body.sheet-open {
+  overflow: hidden;
+}
+
+body.sheet-open .top-chrome {
+  z-index: 50;
+}
+
+#header.top-bar {
+  position: static;
+  flex: 1 1 auto;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  z-index: 30;
-  border-bottom: 1px solid #222;
-  color: #ccc;
-  font-size: 13px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 
 .brand {
@@ -377,11 +399,22 @@ body.scroll-mode #c {
 
 .control-panel {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
   min-width: 0;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+#header .header-right {
+  margin-left: auto;
 }
 
 .panel-section {
@@ -968,7 +1001,7 @@ button.active {
 /* ——— Mobile (phone / narrow) ——— */
 @media (max-width: 899px) {
   :root {
-    --header-h: calc(52px + var(--safe-top));
+    --header-h: calc(56px + var(--safe-top));
     --footer-h: calc(100px + var(--safe-bottom));
   }
 
@@ -990,30 +1023,61 @@ button.active {
     display: none !important;
   }
 
-  #header.top-bar {
+  .top-chrome {
+    flex-wrap: nowrap;
     align-items: center;
-    --header-h: calc(52px + var(--safe-top));
   }
 
-  .control-panel {
+  #header.top-bar {
+    align-items: center;
+    flex: 1;
+  }
+
+  .top-chrome .control-panel {
     display: none;
+  }
+
+  .top-chrome .control-panel.open {
+    display: flex;
     position: fixed;
-    inset: 0;
-    z-index: 40;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 45;
+    flex: none;
+    width: auto;
     flex-direction: column;
     align-items: stretch;
     gap: 0;
     padding: 0;
+    padding-bottom: var(--safe-bottom);
     background: #0f0f12;
     overflow: hidden;
   }
 
-  .control-panel.open {
-    display: flex;
+  /* Don't trap the sheet inside the fixed header bar */
+  body.sheet-open .top-chrome {
+    position: static;
+    height: 0;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+    overflow: visible;
   }
 
-  .control-panel[aria-hidden="false"] {
-    display: flex;
+  body.sheet-open #header.top-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 52;
+    flex: none;
+    padding: calc(6px + var(--safe-top)) calc(8px + var(--safe-right)) 6px calc(8px + var(--safe-left));
+    background: rgba(15, 15, 15, 0.94);
+    border-bottom: 1px solid #222;
   }
 
   .sheet-header {
@@ -1120,18 +1184,11 @@ button.active {
   }
 
   .control-panel .sheet-body-scroll {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .control-panel {
-    padding-bottom: var(--safe-bottom);
-  }
-
-  .control-panel.open {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   footer.bottom-bar {
@@ -1193,8 +1250,24 @@ button.active {
     top: calc(var(--header-h) + var(--safe-top));
   }
 
-  .scroll-grid {
-    grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
+  .scroll-grid-stream {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 2px;
+  }
+
+  .scroll-wall-stream {
+    padding: 6px 4px;
+  }
+
+  .scroll-grid-freeform {
+    grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+    gap: 3px;
+  }
+
+  .scroll-tile-badge {
+    font-size: 8px;
+    padding: 1px 4px;
+    opacity: 0.85;
   }
 
   #drawer.open {
@@ -1208,6 +1281,24 @@ button.active {
 }
 
 @media (min-width: 900px) {
+  .top-chrome .control-panel {
+    position: static;
+    display: flex;
+    flex: 1 1 100%;
+    min-width: 0;
+    width: auto;
+    padding: 0;
+    background: transparent;
+    overflow: visible;
+    border-top: 1px solid #1a1a1a;
+    margin-top: 4px;
+    padding-top: 6px;
+  }
+
+  .top-chrome .control-panel[aria-hidden="true"] {
+    display: flex;
+  }
+
   :root {
     --footer-h: 60px;
   }

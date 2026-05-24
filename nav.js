@@ -68,10 +68,10 @@
       if (!mq.matches) setSheetOpen(false);
     });
 
+    const p = panel();
     if (isMobile()) {
-      if (localStorage.getItem(SHEET_KEY) === "1") setSheetOpen(true);
+      setSheetOpen(localStorage.getItem(SHEET_KEY) === "1");
     } else {
-      const p = panel();
       p?.classList.add("open");
       p?.setAttribute("aria-hidden", "false");
     }

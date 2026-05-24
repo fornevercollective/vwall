@@ -195,22 +195,26 @@
     return tile;
   }
 
-  function groupEntries(entries) {
-    const groups = new Map();
-    for (const e of entries) {
-      const g = e.node?.clusterLabel || e.item.genre || "other";
-      if (!groups.has(g)) groups.set(g, []);
-      groups.get(g).push(e);
+  function isGridLayout() {
+    return global.VWallLayout?.isGridMode?.() === true;
+  }
+
+  function sortByGenre(entries) {
+    return [...entries].sort((a, b) => {
+      const ga = a.node?.clusterLabel || a.item.genre || "";
+      const gb = b.node?.clusterLabel || b.item.genre || "";
+      return ga.localeCompare(gb);
+    });
+  }
+
+  function mountFlatGrid(wall, items, layoutClass) {
+    const grid = document.createElement("div");
+    grid.className = `scroll-grid ${layoutClass}`;
+    for (const e of items) {
+      grid.appendChild(buildTile(e));
     }
-    const labels = global.clusterLabels || [...groups.keys()];
-    const ordered = [];
-    for (const label of labels) {
-      if (groups.has(label)) ordered.push({ label, items: groups.get(label) });
-    }
-    for (const [label, items] of groups) {
-      if (!labels.includes(label)) ordered.push({ label, items });
-    }
-    return ordered;
+    wall.appendChild(grid);
+    return grid;
   }
 
   function mount(entries) {
@@ -225,35 +229,40 @@
       ? entries.filter((e) => (e.node?.clusterLabel || e.item.genre) === activeGenre)
       : entries;
 
+    const gridLayout = isGridLayout();
+    document.body.classList.toggle("scroll-layout-grid", gridLayout);
+    document.body.classList.toggle("scroll-layout-stream", !gridLayout);
+
     wall.innerHTML = "";
-    const groups = groupEntries(filtered);
+    wall.className = "scroll-wall";
+    wall.classList.add(gridLayout ? "scroll-wall-grid" : "scroll-wall-stream");
 
-    for (const { label, items } of groups) {
-      const section = document.createElement("section");
-      section.className = "scroll-genre-section";
-      section.id = "genre-" + label.replace(/\s+/g, "-");
-      section.dataset.genre = label;
+    const sorted = sortByGenre(filtered);
 
-      const head = document.createElement("h3");
-      head.className = "scroll-genre-head";
-      head.textContent = label;
-      section.appendChild(head);
-
-      const grid = document.createElement("div");
-      grid.className = "scroll-grid";
-      for (const e of items) {
-        grid.appendChild(buildTile(e));
-      }
-      section.appendChild(grid);
-      wall.appendChild(section);
+    if (gridLayout) {
+      mountFlatGrid(wall, sorted, "scroll-grid-freeform");
+      const cols = Math.max(5, Math.ceil(Math.sqrt(sorted.length * 1.6)));
+      const rows = Math.ceil(sorted.length / cols) || 1;
+      wall.style.minWidth = `${cols * TILE + 24}px`;
+      wall.style.minHeight = `${rows * TILE + 24}px`;
+    } else {
+      mountFlatGrid(wall, sorted, "scroll-grid-stream");
+      wall.style.minWidth = "";
+      wall.style.minHeight = "";
     }
 
-    const cols = Math.max(4, Math.ceil(Math.sqrt(filtered.length * 1.4)));
-    const rows = Math.ceil(filtered.length / cols) || 1;
-    wall.style.minWidth = `${cols * TILE + 32}px`;
-    wall.style.minHeight = `${rows * TILE + groups.length * 36 + 32}px`;
-
     requestAnimationFrame(() => observeScrollEdges(viewport));
+  }
+
+  function scrollToGenre(label) {
+    const wall = document.getElementById("scrollWall");
+    if (!wall || !label) return;
+    for (const tile of wall.querySelectorAll(".scroll-tile")) {
+      if (tile.dataset.genre === label) {
+        tile.scrollIntoView({ behavior: "smooth", block: "start" });
+        break;
+      }
+    }
   }
 
   function observeScrollEdges(viewport) {
@@ -302,12 +311,7 @@
           activeGenre = activeGenre === label ? null : label;
           render();
           onGenreChange();
-          if (activeGenre) {
-            document.getElementById("genre-" + label.replace(/\s+/g, "-"))?.scrollIntoView({
-              behavior: "smooth",
-              block: "start"
-            });
-          }
+          if (activeGenre) scrollToGenre(activeGenre);
         });
         rail.appendChild(chip);
       }
@@ -338,7 +342,8 @@
     openInlinePreview,
     closeInlinePreview,
     setActiveGenre,
-    getActiveGenre: () => activeGenre
+    getActiveGenre: () => activeGenre,
+    scrollToGenre
   };
 
   init();

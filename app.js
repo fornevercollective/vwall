@@ -23,6 +23,11 @@ let nodes = [];
 let blurEnabled = false;
 let blendEnabled = false;
 let gridMode = false; // false = sphere, true = checkerboard
+
+window.VWallLayout = {
+  isGridMode: () => gridMode,
+  isSphereMode: () => !gridMode
+};
 let dragging = false;
 let last = { x: 0, y: 0 };
 let selected = null;

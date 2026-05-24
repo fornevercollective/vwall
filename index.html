@@ -11,16 +11,22 @@
 </head>
 <body>
 
-<header id="header" class="top-bar">
-  <button type="button" id="menuBtn" class="icon-btn mobile-only" aria-expanded="false" aria-controls="controlPanel">Controls</button>
-  <span class="brand mobile-only">VWall</span>
-
-  <div id="controlPanel" class="control-panel" aria-hidden="false">
-    <div class="sheet-header mobile-only">
-      <h2 class="sheet-title">Controls</h2>
-      <button type="button" id="sheetClose" class="icon-btn" aria-label="Close controls">✕</button>
+<div class="top-chrome">
+  <header id="header" class="top-bar">
+    <button type="button" id="menuBtn" class="icon-btn mobile-only" aria-expanded="false" aria-controls="controlPanel">Controls</button>
+    <span class="brand mobile-only">VWall</span>
+    <div class="header-right">
+      <button type="button" id="perf" class="perf-compact touch-target" aria-expanded="true" aria-controls="metricsPanel" title="Metrics">—</button>
     </div>
+  </header>
 
+  <div id="controlPanel" class="control-panel" aria-hidden="true">
+  <div class="sheet-header mobile-only">
+    <h2 class="sheet-title">Controls</h2>
+    <button type="button" id="sheetClose" class="icon-btn" aria-label="Close controls">✕</button>
+  </div>
+
+  <div id="controlPanelBody" class="sheet-body-scroll">
     <section class="panel-section">
       <h3 class="panel-heading mobile-only">Count</h3>
       <div class="count-block">
@@ -80,11 +86,8 @@
       </div>
     </section>
   </div>
-
-  <div class="header-right">
-    <button type="button" id="perf" class="perf-compact touch-target" aria-expanded="true" aria-controls="metricsPanel" title="Metrics">—</button>
   </div>
-</header>
+</div>
 
 <div id="sheetBackdrop" class="sheet-backdrop mobile-only" aria-hidden="true"></div>
 
