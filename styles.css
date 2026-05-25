@@ -1105,8 +1105,10 @@ body.detail-open {
   left: 14px;
 }
 
+/* Sit at the right edge of the media column, not the panel — so the next
+   chevron overlays the image just like the prev chevron does on the left. */
 #drawer .detail-nav-next {
-  right: 14px;
+  right: calc(min(300px, 34%) + 14px);
 }
 
 #drawer .detail-layout {
@@ -1701,6 +1703,12 @@ body.detail-open {
     border-left: none;
     border-top: 1px solid #252530;
     max-height: 38vh;
+  }
+
+  /* Stacked layout: meta is below the media, so next chevron sits at the
+     panel's right edge again. */
+  #drawer.detail-lightbox.open .detail-nav-next {
+    right: 14px;
   }
 
   body.scroll-mode #drawer.open {
