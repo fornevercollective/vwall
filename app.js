@@ -763,7 +763,7 @@ async function lazyLoadThumb(entry, gen) {
   const mt = item.mediaType;
   const needsThumb = ["image", "gif", "video", "live"].includes(mt);
 
-  const ladder = global.VWallLadder?.ensureItemLadder?.(item);
+  const ladder = window.VWallLadder?.ensureItemLadder?.(item);
   const fullUrl =
     (ladder?.fullTier && ladder.fullTier()?.url) ||
     item.url ||
@@ -941,7 +941,7 @@ async function upgradeLodToFullRes(entry, container, lg) {
 
   container._lod = "detail-loading";
   const alias = `vwall:full:${entry.key}`;
-  const lad = global.VWallLadder?.ensureItemLadder?.(item);
+  const lad = window.VWallLadder?.ensureItemLadder?.(item);
   const fullSrc = (lad?.fullTier && lad.fullTier()?.url) || item.url;
   try {
     const tex = await PIXI.Assets.load({
@@ -1166,7 +1166,7 @@ async function mountDisplayEntries(entries, opts = {}) {
 
   if (stream.length && window.VWallStreamLoad) {
     await VWallStreamLoad.mountInWaves(stream, mountWallNode, gridMode, {
-      mountOrder: global.VWallLadder?.ORDER_FIFO ?? "fifo"
+      mountOrder: window.VWallLadder?.ORDER_FIFO ?? "fifo"
     });
   } else if (stream.length) {
     for (const item of stream) mountWallNode(item);
