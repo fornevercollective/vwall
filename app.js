@@ -621,6 +621,7 @@ function navigatePreview(delta) {
       index: next,
       onNavigate: navigatePreview
     });
+    prefetchPreviewNeighbors();
   } else {
     openDrawer(item);
   }
@@ -715,6 +716,7 @@ function openDrawer(data) {
   }
 
   if (!isOpen) bindDrawerSwipe();
+  prefetchPreviewNeighbors();
 }
 
 let _drawerSwipeBound = false;
@@ -1574,7 +1576,7 @@ function createWallNode(item, bx, by, emb) {
   let hoverTimer = null;
   container.on("pointerover", () => {
     if (hoverTimer) clearTimeout(hoverTimer);
-    hoverTimer = setTimeout(() => prefetchFullRes(container), 140);
+    hoverTimer = setTimeout(() => prefetchFullRes(container), 90);
   });
   container.on("pointerout", () => {
     if (hoverTimer) {
@@ -1587,30 +1589,35 @@ function createWallNode(item, bx, by, emb) {
 }
 
 const _fullResPrefetched = new Set();
-let _fullResInFlight = 0;
-const FULL_RES_PREFETCH_MAX = 4;
 
-function prefetchFullRes(container) {
-  if (!container?.url) return;
-  const mt = container.mediaType;
-  if (mt !== "image" && mt !== "gif") return;
-  const url = container.url;
-  if (container.thumbUrl && container.thumbUrl === url) return;
+function prefetchUrl(url, mediaType) {
+  if (!url) return;
+  if (mediaType && mediaType !== "image" && mediaType !== "gif") return;
   if (_fullResPrefetched.has(url)) return;
-  if (_fullResInFlight >= FULL_RES_PREFETCH_MAX) return;
   _fullResPrefetched.add(url);
-  _fullResInFlight++;
   const img = new Image();
   img.decoding = "async";
   img.loading = "eager";
-  img.crossOrigin = "anonymous";
-  const done = () => { _fullResInFlight = Math.max(0, _fullResInFlight - 1); };
-  img.onload = done;
-  img.onerror = () => {
-    _fullResInFlight = Math.max(0, _fullResInFlight - 1);
-    _fullResPrefetched.delete(url);
-  };
+  img.onerror = () => _fullResPrefetched.delete(url);
   img.src = url;
+}
+
+function prefetchFullRes(container) {
+  if (!container) return;
+  if (container.thumbUrl && container.thumbUrl === container.url) return;
+  prefetchUrl(container.url, container.mediaType);
+}
+
+function prefetchPreviewNeighbors() {
+  const list = previewState.list;
+  if (!list || list.length < 2) return;
+  const len = list.length;
+  for (const o of [1, -1, 2, -2]) {
+    const i = ((previewState.index + o) % len + len) % len;
+    const it = list[i];
+    if (!it) continue;
+    prefetchUrl(it.url, it.mediaType);
+  }
 }
 
 // ==========================
