@@ -237,7 +237,7 @@ async function searchWikimedia(query, maxItems, searchQuery) {
       gsrnamespace: "6",
       gsrlimit: "50",
       prop: "imageinfo",
-      iiprop: "url|mime|thumburl",
+      iiprop: "url|mime",
       iiurlwidth: "512",
       format: "json",
       origin: "*"
@@ -286,9 +286,9 @@ async function searchWikimedia(query, maxItems, searchQuery) {
 
 async function searchOpenverseImages(query, maxItems, opts = {}) {
   const results = [];
-  const pageSize = 20;
+  const pageSize = 50;
   let page = 1;
-  const maxPages = Math.min(60, Math.ceil(maxItems / pageSize) + 2);
+  const maxPages = Math.min(40, Math.ceil(maxItems / pageSize) + 2);
   const source = opts.openverseSource;
 
   while (results.length < maxItems * 2 && page <= maxPages) {
@@ -340,9 +340,9 @@ async function searchOpenverseAudio(query, maxItems, opts = {}) {
   if (!acceptsMediaType("audio")) return [];
 
   const results = [];
-  const pageSize = 20;
+  const pageSize = 50;
   let page = 1;
-  const maxPages = Math.min(40, Math.ceil(maxItems / pageSize) + 2);
+  const maxPages = Math.min(30, Math.ceil(maxItems / pageSize) + 2);
   const source = opts.openverseSource;
 
   while (results.length < maxItems && page <= maxPages) {
