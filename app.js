@@ -570,24 +570,84 @@ function formatDrawerMeta(data) {
   return "";
 }
 
+const previewState = { list: [], index: -1 };
+
+function buildPreviewList() {
+  const out = [];
+  for (const key of session().displayOrder) {
+    const e = session().get(key);
+    if (!e || !acceptsMediaType(e.item.mediaType)) continue;
+    out.push({
+      url: e.item.url,
+      title: e.item.title,
+      snippet: e.item.snippet,
+      mediaType: e.item.mediaType,
+      clusterLabel: e.node?.clusterLabel || e.item.genre || "",
+      probeMeta: e.probeMeta || e.node?.probeMeta || null
+    });
+  }
+  return out;
+}
+
 function openPreview(data) {
+  previewState.list = buildPreviewList();
+  const i = previewState.list.findIndex((it) => it.url === data.url);
+  previewState.index = i >= 0 ? i : 0;
+
   if (window.VWallScroll?.useScrollWall()) {
-    VWallScroll.openInlinePreview(data);
+    VWallScroll.openInlinePreview(previewState.list[previewState.index] || data, {
+      total: previewState.list.length,
+      index: previewState.index,
+      onNavigate: navigatePreview
+    });
     return;
   }
-  openDrawer(data);
+  openDrawer(previewState.list[previewState.index] || data);
+}
+
+function navigatePreview(delta) {
+  if (!previewState.list.length) return;
+  const next = (previewState.index + delta + previewState.list.length) % previewState.list.length;
+  previewState.index = next;
+  const item = previewState.list[next];
+  if (window.VWallScroll?.useScrollWall()) {
+    VWallScroll.openInlinePreview(item, {
+      total: previewState.list.length,
+      index: next,
+      onNavigate: navigatePreview
+    });
+  } else {
+    openDrawer(item);
+  }
 }
 
 function openDrawer(data) {
+  destroyDrawerPlayback(selected);
   selected = data;
   const mt = data.mediaType || "image";
+  const isOpen = drawer.classList.contains("open");
   drawer.classList.add("open");
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("detail-open");
+
+  const total = previewState.list.length;
+  const idx = previewState.index;
+  const counter =
+    total > 1 && idx >= 0
+      ? `<span class="detail-counter">${idx + 1} / ${total}</span>`
+      : "";
+  const nav =
+    total > 1
+      ? `<button type="button" class="detail-nav detail-nav-prev" data-detail-prev aria-label="Previous (←)">‹</button>
+         <button type="button" class="detail-nav detail-nav-next" data-detail-next aria-label="Next (→)">›</button>`
+      : "";
+
   drawer.innerHTML = `
     <div class="detail-backdrop" data-detail-close tabindex="-1"></div>
     <div class="detail-panel">
       <button type="button" class="detail-close" data-detail-close aria-label="Close preview">✕</button>
+      ${counter}
+      ${nav}
       <div class="detail-layout">
         <div class="detail-media">${drawerPreview(data)}</div>
         <aside class="detail-meta drawer-meta-lite">
@@ -606,6 +666,14 @@ function openDrawer(data) {
   drawer.querySelectorAll("[data-detail-close]").forEach((el) => {
     el.addEventListener("click", () => window.closeDrawer());
   });
+  drawer.querySelector("[data-detail-prev]")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    navigatePreview(-1);
+  });
+  drawer.querySelector("[data-detail-next]")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    navigatePreview(1);
+  });
   drawer.querySelector(".detail-panel")?.addEventListener("click", (e) => e.stopPropagation());
 
   const techBtn = drawer.querySelector(".drawer-tech-toggle");
@@ -616,6 +684,7 @@ function openDrawer(data) {
     techBtn?.setAttribute("aria-expanded", opening ? "true" : "false");
     techBtn.textContent = opening ? "Hide technical details" : "Technical details";
   });
+
   if (mt === "live" && data.url.includes(".m3u8") && window.Hls?.isSupported()) {
     const video = document.getElementById("drawerVideo");
     const hls = new Hls();
@@ -639,6 +708,43 @@ function openDrawer(data) {
       }
     });
   }
+
+  if (!isOpen) bindDrawerSwipe();
+}
+
+let _drawerSwipeBound = false;
+function bindDrawerSwipe() {
+  if (_drawerSwipeBound) return;
+  _drawerSwipeBound = true;
+  let sx = 0;
+  let sy = 0;
+  let st = 0;
+  let tracking = false;
+  drawer.addEventListener("pointerdown", (e) => {
+    if (!drawer.classList.contains("open")) return;
+    const t = e.target;
+    if (t?.closest("button, a, input, select, textarea, video, audio")) return;
+    tracking = true;
+    sx = e.clientX;
+    sy = e.clientY;
+    st = performance.now();
+  });
+  drawer.addEventListener("pointerup", (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+    const dt = performance.now() - st;
+    if (dt > 700) return;
+    const ax = Math.abs(dx);
+    const ay = Math.abs(dy);
+    if (ax > 60 && ax > ay * 1.3) {
+      navigatePreview(dx < 0 ? 1 : -1);
+    } else if (dy > 90 && ay > ax * 1.3) {
+      window.closeDrawer();
+    }
+  });
+  drawer.addEventListener("pointercancel", () => { tracking = false; });
 }
 
 function destroyDrawerPlayback(data) {
@@ -654,10 +760,30 @@ window.closeDrawer = () => {
   drawer.setAttribute("aria-hidden", "true");
   document.body.classList.remove("detail-open");
   selected = null;
+  previewState.list = [];
+  previewState.index = -1;
 };
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && drawer.classList.contains("open")) window.closeDrawer();
+  if (e.target?.matches?.("input, textarea, select")) return;
+  const drawerOpen = drawer.classList.contains("open");
+  if (drawerOpen) {
+    if (e.key === "Escape") {
+      window.closeDrawer();
+      e.preventDefault();
+    } else if (e.key === "ArrowRight") {
+      navigatePreview(1);
+      e.preventDefault();
+    } else if (e.key === "ArrowLeft") {
+      navigatePreview(-1);
+      e.preventDefault();
+    }
+    return;
+  }
+  if (e.key === "Home" || ((e.metaKey || e.ctrlKey) && e.key === "0")) {
+    window.recenterWorld();
+    e.preventDefault();
+  }
 });
 
 // ==========================
@@ -1477,6 +1603,7 @@ document.getElementById("layoutBtn")?.addEventListener("click", () => window.tog
 document.getElementById("blurBtn")?.addEventListener("click", () => window.toggleBlur());
 document.getElementById("blendBtn")?.addEventListener("click", () => window.toggleBlend());
 document.getElementById("reseedBtn")?.addEventListener("click", () => window.reseed());
+document.getElementById("recenterBtn")?.addEventListener("click", () => window.recenterWorld());
 
 // ==========================
 // TOGGLES
@@ -1511,11 +1638,81 @@ window.reseed = async () => {
 };
 
 // ==========================
-// CAMERA (PAN + ZOOM)
+// CAMERA (PAN + ZOOM + BOUNDS + RECENTER)
 // ==========================
 let scale = 1;
 let targetScale = 1;
 let lodSweepAcc = 0;
+
+const CAMERA_SLACK = 140;
+let wallBoundsCache = { len: -1, minX: 0, maxX: 0, minY: 0, maxY: 0 };
+
+function getWallBounds() {
+  if (!nodes.length) return null;
+  if (wallBoundsCache.len === nodes.length) return wallBoundsCache;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const n of nodes) {
+    if (n.baseX < minX) minX = n.baseX;
+    if (n.baseX > maxX) maxX = n.baseX;
+    if (n.baseY < minY) minY = n.baseY;
+    if (n.baseY > maxY) maxY = n.baseY;
+  }
+  wallBoundsCache = { len: nodes.length, minX, maxX, minY, maxY };
+  return wallBoundsCache;
+}
+
+function clampCameraToWall() {
+  const b = getWallBounds();
+  if (!b) return;
+  const s = Math.max(scale, 1e-3);
+  const minScreenX = world.x + b.minX * s;
+  const maxScreenX = world.x + b.maxX * s;
+  const minScreenY = world.y + b.minY * s;
+  const maxScreenY = world.y + b.maxY * s;
+  if (maxScreenX < CAMERA_SLACK) world.x = CAMERA_SLACK - b.maxX * s;
+  else if (minScreenX > innerWidth - CAMERA_SLACK) world.x = innerWidth - CAMERA_SLACK - b.minX * s;
+  if (maxScreenY < CAMERA_SLACK) world.y = CAMERA_SLACK - b.maxY * s;
+  else if (minScreenY > innerHeight - CAMERA_SLACK) world.y = innerHeight - CAMERA_SLACK - b.minY * s;
+}
+
+let recenterRaf = null;
+window.recenterWorld = function recenterWorld(opts = {}) {
+  const animate = opts.animate !== false;
+  const dur = opts.durationMs ?? 320;
+  const targetX = innerWidth / 2;
+  const targetY = innerHeight / 2;
+  const targetS = 1;
+
+  if (recenterRaf) cancelAnimationFrame(recenterRaf);
+
+  if (!animate || dur <= 0) {
+    world.x = targetX;
+    world.y = targetY;
+    scale = targetS;
+    targetScale = targetS;
+    return;
+  }
+
+  const startX = world.x;
+  const startY = world.y;
+  const startS = scale;
+  const t0 = performance.now();
+  targetScale = targetS;
+
+  const step = () => {
+    const t = Math.min(1, (performance.now() - t0) / dur);
+    const k = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    world.x = startX + (targetX - startX) * k;
+    world.y = startY + (targetY - startY) * k;
+    scale = startS + (targetS - startS) * k;
+    if (t < 1) recenterRaf = requestAnimationFrame(step);
+    else recenterRaf = null;
+  };
+  recenterRaf = requestAnimationFrame(step);
+};
 
 window.addEventListener("wheel", e => {
   targetScale *= e.deltaY > 0 ? 0.9 : 1.1;
@@ -1550,6 +1747,7 @@ app.ticker.add(() => {
 
   scale += (targetScale - scale) * 0.08;
   world.scale.set(scale);
+  if (!dragging) clampCameraToWall();
 
   const guard = window.VWallPerfGuard;
   const animate = guard?.shouldAnimateNodes?.() !== false;

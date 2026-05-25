@@ -84,18 +84,37 @@
     }
   }
 
-  function openInlinePreview(data) {
+  let inlineNavCallback = null;
+
+  function openInlinePreview(data, opts = {}) {
     const panel = document.getElementById("inlinePreview");
     if (!panel) return;
+    const wasOpen = panel.classList.contains("open");
     selectedKey = data.url;
+    inlineNavCallback = typeof opts.onNavigate === "function" ? opts.onNavigate : null;
+    const total = opts.total || 0;
+    const idx = typeof opts.index === "number" ? opts.index : -1;
     const mt = data.mediaType || "image";
 
     destroyInlinePlayback();
     document.body.classList.add("preview-open");
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
+
+    const counter =
+      total > 1 && idx >= 0
+        ? `<span class="inline-preview-counter">${idx + 1} / ${total}</span>`
+        : "";
+    const nav =
+      total > 1
+        ? `<button type="button" class="inline-preview-nav inline-preview-prev" data-inline-prev aria-label="Previous">‹</button>
+           <button type="button" class="inline-preview-nav inline-preview-next" data-inline-next aria-label="Next">›</button>`
+        : "";
+
     panel.innerHTML = `
       <button type="button" class="inline-preview-close" aria-label="Close preview">↓</button>
+      ${counter}
+      ${nav}
       <div class="inline-preview-media">${previewMediaHtml(data)}</div>
       <div class="inline-preview-meta">
         ${data.title ? `<p class="preview-title">${escapeHtml(data.title)}</p>` : ""}
@@ -108,10 +127,20 @@
     `;
 
     panel.querySelector(".inline-preview-close")?.addEventListener("click", closeInlinePreview);
+    panel.querySelector("[data-inline-prev]")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      inlineNavCallback?.(-1);
+    });
+    panel.querySelector("[data-inline-next]")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      inlineNavCallback?.(1);
+    });
     panel.querySelector(".inline-preview-details-toggle")?.addEventListener("click", () => {
       setInlineDetailsOpen(!inlineDetailsOpen);
     });
     setInlineDetailsOpen(false);
+
+    if (!wasOpen) bindInlinePreviewSwipe(panel);
 
     if (mt === "live" && data.url.includes(".m3u8") && global.Hls?.isSupported()) {
       const video = document.getElementById("inlinePreviewVideo");
@@ -145,6 +174,42 @@
     panel?.classList.remove("open");
     panel?.setAttribute("aria-hidden", "true");
     selectedKey = null;
+    inlineNavCallback = null;
+  }
+
+  let _inlineSwipeBound = false;
+  function bindInlinePreviewSwipe(panel) {
+    if (_inlineSwipeBound) return;
+    _inlineSwipeBound = true;
+    let sx = 0;
+    let sy = 0;
+    let st = 0;
+    let tracking = false;
+    panel.addEventListener("pointerdown", (e) => {
+      if (!panel.classList.contains("open")) return;
+      const t = e.target;
+      if (t?.closest("button, a, input, select, textarea, video, audio")) return;
+      tracking = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      st = performance.now();
+    }, { passive: true });
+    panel.addEventListener("pointerup", (e) => {
+      if (!tracking) return;
+      tracking = false;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      const dt = performance.now() - st;
+      if (dt > 700) return;
+      const ax = Math.abs(dx);
+      const ay = Math.abs(dy);
+      if (ax > 50 && ax > ay * 1.2) {
+        inlineNavCallback?.(dx < 0 ? 1 : -1);
+      } else if (dy > 80 && ay > ax * 1.2) {
+        closeInlinePreview();
+      }
+    }, { passive: true });
+    panel.addEventListener("pointercancel", () => { tracking = false; }, { passive: true });
   }
 
   function setInlineDetailsOpen(open) {
