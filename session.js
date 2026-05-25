@@ -82,6 +82,19 @@
     bumpStats(kind) {
       if (this.stats[kind] != null) this.stats[kind]++;
     }
+
+    clearAll() {
+      for (const [, e] of this.byKey) {
+        if (e.node) {
+          try { e.node.destroy({ children: true }); } catch { /* ignore */ }
+        }
+      }
+      this.byKey.clear();
+      this.displayOrder = [];
+      this.lastQuery = "";
+      this.cursors = {};
+      this.stats = { cacheHits: 0, reusedNodes: 0, newNodes: 0, skippedProbes: 0 };
+    }
   }
 
   global.VWallSession = new MediaSession();

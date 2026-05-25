@@ -553,19 +553,24 @@ function escapeHtml(s) {
 }
 
 function drawerPreview(data) {
-  const url = escapeHtml(data.url);
   const mt = data.mediaType || "image";
+  const lite = !detailsMode();
+  const srcUrl = lite ? (data.thumbUrl || data.url) : data.url;
+  const url = escapeHtml(srcUrl);
 
   if (mt === "audio") {
     return `<audio controls src="${url}" crossorigin="anonymous"></audio>`;
   }
   if (mt === "video" || mt === "live") {
+    if (lite && data.thumbUrl) {
+      return `<img src="${escapeHtml(data.thumbUrl)}" alt="" />`;
+    }
     return `<video id="drawerVideo" controls playsinline src="${url}" crossorigin="anonymous"></video>`;
   }
   if (mt === "gsplat") {
     return `<p class="hint">Gaussian splat / point cloud — open in a compatible viewer.</p>`;
   }
-  return `<img src="${url}" alt="" crossorigin="anonymous" />`;
+  return `<img src="${url}" alt="" />`;
 }
 
 function formatDrawerMeta(data) {
@@ -699,7 +704,7 @@ function openDrawer(data) {
     data._hls = hls;
   }
 
-  if (!data.probeMeta && window.VWallProbePool) {
+  if (detailsMode() && !data.probeMeta && window.VWallProbePool) {
     VWallProbePool.probeCached({ url: data.url, mediaType: mt }).then((r) => {
       const probeMeta = r?.meta;
       data.probeMeta = probeMeta;
@@ -1613,8 +1618,25 @@ function createWallNode(item, bx, by, emb) {
 
 const _fullResPrefetched = new Set();
 
+const DETAILS_KEY = "vwallDetailsMode";
+function detailsMode() {
+  try {
+    return localStorage.getItem(DETAILS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+function saveDetailsMode(on) {
+  try {
+    localStorage.setItem(DETAILS_KEY, on ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
 function prefetchUrl(url, mediaType) {
   if (!url) return;
+  if (!detailsMode()) return;
   if (mediaType && mediaType !== "image" && mediaType !== "gif") return;
   if (_fullResPrefetched.has(url)) return;
   _fullResPrefetched.add(url);
@@ -1632,6 +1654,7 @@ function prefetchFullRes(container) {
 }
 
 function prefetchPreviewNeighbors() {
+  if (!detailsMode()) return;
   const list = previewState.list;
   if (!list || list.length < 2) return;
   const len = list.length;
@@ -1682,6 +1705,60 @@ document.getElementById("blurBtn")?.addEventListener("click", () => window.toggl
 document.getElementById("blendBtn")?.addEventListener("click", () => window.toggleBlend());
 document.getElementById("reseedBtn")?.addEventListener("click", () => window.reseed());
 document.getElementById("recenterBtn")?.addEventListener("click", () => window.recenterWorld());
+
+function syncDetailsBtn() {
+  const btn = document.getElementById("detailsBtn");
+  if (!btn) return;
+  const on = detailsMode();
+  btn.textContent = on ? "Details: ON" : "Details: OFF";
+  btn.classList.toggle("active", on);
+  btn.setAttribute(
+    "title",
+    on
+      ? "Click tiles to load the full image + metadata (default)"
+      : "Light mode — click tiles shows the thumbnail only; no full-res / probe fetches"
+  );
+}
+window.toggleDetails = () => {
+  saveDetailsMode(!detailsMode());
+  syncDetailsBtn();
+};
+document.getElementById("detailsBtn")?.addEventListener("click", () => window.toggleDetails());
+syncDetailsBtn();
+
+window.resetVWallCaches = async () => {
+  if (window.VWallStreamLoad?.cancel) VWallStreamLoad.cancel();
+  lazyGen++;
+  lazyQueue = [];
+  lazyInFlight = 0;
+  lodUpgradeInFlight = 0;
+  apiResultCache.clear?.();
+  _fullResPrefetched.clear?.();
+  if (window.VWallProbePool?.cache?.clear) VWallProbePool.cache.clear();
+  if (window.VWallCatalog?.entries?.clear) VWallCatalog.entries.clear();
+  for (const child of [...world.children]) {
+    try { world.removeChild(child); child.destroy?.({ children: true }); } catch { /* ignore */ }
+  }
+  nodes = [];
+  session().clearAll?.();
+  if (window.VWallMetrics) {
+    VWallMetrics.resetCounts(0, {});
+  }
+  try {
+    if (window.PIXI?.Assets) {
+      PIXI.Assets.cache.reset();
+    }
+    if (window.PIXI?.utils?.clearTextureCache) {
+      PIXI.utils.clearTextureCache();
+    }
+  } catch {
+    /* ignore */
+  }
+  setSearchStatus("Cache cleared — reloading…");
+  const q = document.getElementById("search")?.value?.trim() || null;
+  await buildUniverse(q);
+};
+document.getElementById("resetCacheBtn")?.addEventListener("click", () => window.resetVWallCaches());
 
 // ==========================
 // TOGGLES
