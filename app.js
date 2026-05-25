@@ -261,9 +261,14 @@ async function searchWikimedia(query, maxItems, searchQuery) {
       if (!acceptsMediaType(mt)) continue;
 
       const isStream = mt === "video" || mt === "live" || mt === "audio";
+      const wmFileName = (page.title || "").replace(/^File:/, "");
+      const wmThumbFallback =
+        mt === "image" || mt === "gif"
+          ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(wmFileName)}?width=512`
+          : null;
       results.push(mediaItem({
         url: info.url,
-        thumbUrl: info.thumburl || (mt === "image" || mt === "gif" ? info.url : null),
+        thumbUrl: info.thumburl || wmThumbFallback,
         title,
         snippet: "Wikimedia Commons",
         mime,
@@ -1551,18 +1556,61 @@ function createWallNode(item, bx, by, emb) {
   container._thumbAlias = null;
   container._detailAlias = null;
   container._canDetailLod = false;
-  container.on("pointertap", () =>
-    openPreview({
-      url: container.url,
-      title: container.title,
-      snippet: container.snippet,
-      mediaType: container.mediaType,
-      clusterLabel: container.clusterLabel,
-      probeMeta: container.probeMeta
-    })
-  );
+
+  const previewPayload = () => ({
+    url: container.url,
+    title: container.title,
+    snippet: container.snippet,
+    mediaType: container.mediaType,
+    clusterLabel: container.clusterLabel,
+    probeMeta: container.probeMeta
+  });
+
+  container.on("pointertap", () => {
+    prefetchFullRes(container);
+    openPreview(previewPayload());
+  });
+
+  let hoverTimer = null;
+  container.on("pointerover", () => {
+    if (hoverTimer) clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => prefetchFullRes(container), 140);
+  });
+  container.on("pointerout", () => {
+    if (hoverTimer) {
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }
+  });
 
   return container;
+}
+
+const _fullResPrefetched = new Set();
+let _fullResInFlight = 0;
+const FULL_RES_PREFETCH_MAX = 4;
+
+function prefetchFullRes(container) {
+  if (!container?.url) return;
+  const mt = container.mediaType;
+  if (mt !== "image" && mt !== "gif") return;
+  const url = container.url;
+  if (container.thumbUrl && container.thumbUrl === url) return;
+  if (_fullResPrefetched.has(url)) return;
+  if (_fullResInFlight >= FULL_RES_PREFETCH_MAX) return;
+  _fullResPrefetched.add(url);
+  _fullResInFlight++;
+  const img = new Image();
+  img.decoding = "async";
+  img.loading = "eager";
+  img.crossOrigin = "anonymous";
+  const done = () => { _fullResInFlight = Math.max(0, _fullResInFlight - 1); };
+  img.onload = done;
+  img.onerror = () => {
+    _fullResInFlight = Math.max(0, _fullResInFlight - 1);
+    _fullResPrefetched.delete(url);
+  };
+  img.src = url;
 }
 
 // ==========================
@@ -1784,11 +1832,6 @@ app.ticker.add(() => {
     }
   }
 
-  lodSweepAcc++;
-  if (lodSweepAcc >= 22) {
-    lodSweepAcc = 0;
-    runTextureLodSweep();
-  }
 });
 
 // ==========================
