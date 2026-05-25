@@ -835,6 +835,28 @@ let lazyInFlight = 0;
 let lazyQueue = [];
 const session = () => window.VWallSession;
 
+let _reclumpTimer = null;
+let _reclumpPending = 0;
+
+function scheduleReclumpIfNeeded() {
+  if (document.getElementById("sortMode")?.value !== "loaded") return;
+  _reclumpPending++;
+  if (_reclumpTimer) return;
+  _reclumpTimer = setTimeout(async () => {
+    _reclumpTimer = null;
+    const flushed = _reclumpPending;
+    _reclumpPending = 0;
+    if (flushed === 0) return;
+    if (document.getElementById("sortMode")?.value !== "loaded") return;
+    const q = document.getElementById("search")?.value?.trim() || null;
+    try {
+      await syncUniverse(q, { layoutOnly: true });
+    } catch {
+      /* ignore */
+    }
+  }, 1400);
+}
+
 function lazyMarkLoaded(entry, ok) {
   const m = VWallMetrics?.wallMetrics;
   if (!m) return;
@@ -855,6 +877,7 @@ function lazyMarkLoaded(entry, ok) {
     const perfBtn = document.getElementById("perf");
     if (perfBtn) perfBtn.title = `Metrics · ${m.loaded}/${m.total}`;
   }
+  scheduleReclumpIfNeeded();
 }
 
 async function lazyProbeEntry(entry) {

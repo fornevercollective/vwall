@@ -161,6 +161,14 @@
     return mediaMeta?.[mt]?.order ?? 99;
   }
 
+  function statusOrder(entry) {
+    const s = entry?.thumbState;
+    if (s === "loaded") return 0;
+    if (s === "loading") return 1;
+    if (s === "failed") return 3;
+    return 2;
+  }
+
   function sortList(list, mode, mediaMeta) {
     if (!mode || mode === "mixed") return list;
 
@@ -171,6 +179,9 @@
     switch (mode) {
       case "type":
         sorted.sort((a, b) => typeOrder(a, mediaMeta) - typeOrder(b, mediaMeta));
+        break;
+      case "loaded":
+        sorted.sort((a, b) => statusOrder(a) - statusOrder(b));
         break;
       case "resolution":
         sorted.sort((a, b) => cmpNum(resolutionOf(a), resolutionOf(b), -1));
