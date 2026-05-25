@@ -1739,7 +1739,7 @@ body.detail-open {
     left: auto;
     width: auto;
     flex: none;
-    z-index: 2;
+    z-index: 5;
   }
 
   #header .mobile-only,
@@ -1768,6 +1768,12 @@ body.detail-open {
     gap: 14px;
     flex-wrap: wrap;
     min-width: 0;
+  }
+
+  /* Reserve room for the absolute-positioned #perf button in the top-right
+     corner so the sort/count controls never get covered. */
+  .desk-row-primary {
+    padding-right: 170px;
   }
 
   .desk-row-secondary {
